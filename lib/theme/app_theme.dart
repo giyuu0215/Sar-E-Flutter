@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+const Color _brandSeed = Color(0xFFC9352C);
+
 class AppColors {
   const AppColors({
     required this.background,
@@ -35,55 +37,54 @@ class AppColors {
   final Color info;
   final Color border;
   final Color borderSubtle;
+
+  factory AppColors.fromScheme(ColorScheme scheme) {
+    final bool dark = scheme.brightness == Brightness.dark;
+    final Color background = Color.lerp(
+      scheme.surface,
+      scheme.primary,
+      dark ? 0.06 : 0.02,
+    )!;
+    final Color surface = Color.lerp(
+      scheme.surface,
+      scheme.primary,
+      dark ? 0.12 : 0.04,
+    )!;
+    final Color surfaceMuted = Color.lerp(
+      scheme.surface,
+      scheme.primary,
+      dark ? 0.18 : 0.08,
+    )!;
+
+    return AppColors(
+      background: background,
+      backgroundSecondary: scheme.surface,
+      surface: surface,
+      surfaceMuted: surfaceMuted,
+      text: scheme.onSurface,
+      textSecondary: scheme.onSurfaceVariant,
+      textTertiary: scheme.onSurfaceVariant.withValues(alpha: dark ? 0.72 : 0.64),
+      primary: scheme.primary,
+      primaryDark: Color.lerp(scheme.primary, Colors.black, dark ? 0.14 : 0.22)!,
+      accent: scheme.secondary,
+      error: scheme.error,
+      warning: const Color(0xFFF59E0B),
+      info: scheme.tertiary,
+      border: scheme.outline.withValues(alpha: dark ? 0.55 : 0.40),
+      borderSubtle: scheme.outline.withValues(alpha: dark ? 0.34 : 0.22),
+    );
+  }
 }
 
-const AppColors darkColors = AppColors(
-  background: Color(0xFF0F1115),
-  backgroundSecondary: Color(0xFF161A20),
-  surface: Color(0xFF1B2028),
-  surfaceMuted: Color(0xFF222834),
-  text: Color(0xFFFFFFFF),
-  textSecondary: Color(0xFFA0A0A0),
-  textTertiary: Color(0xFF666666),
-  primary: Color(0xFFE84A3F),
-  primaryDark: Color(0xFFC9352C),
-  accent: Color(0xFFF6C453),
-  error: Color(0xFFEF4444),
-  warning: Color(0xFFF59E0B),
-  info: Color(0xFF3B82F6),
-  border: Color(0x33FFFFFF),
-  borderSubtle: Color(0x14FFFFFF),
-);
-
-const AppColors lightColors = AppColors(
-  background: Color(0xFFF7F8FA),
-  backgroundSecondary: Color(0xFFFFFFFF),
-  surface: Color(0xFFFFFFFF),
-  surfaceMuted: Color(0xFFF2F4F8),
-  text: Color(0xFF1A1A1A),
-  textSecondary: Color(0xFF666666),
-  textTertiary: Color(0xFF999999),
-  primary: Color(0xFFC9352C),
-  primaryDark: Color(0xFFA02A24),
-  accent: Color(0xFFF6C453),
-  error: Color(0xFFDC2626),
-  warning: Color(0xFFD97706),
-  info: Color(0xFF2563EB),
-  border: Color(0x1A000000),
-  borderSubtle: Color(0x0F000000),
-);
-
-ThemeData buildTheme(Brightness brightness) {
-  final AppColors c = brightness == Brightness.dark ? darkColors : lightColors;
-  final ColorScheme scheme = ColorScheme.fromSeed(
-    seedColor: c.primary,
-    brightness: brightness,
-    primary: c.primary,
-    secondary: c.accent,
-    tertiary: c.info,
-    surface: c.surface,
-    error: c.error,
-  );
+ThemeData buildTheme(Brightness brightness, {ColorScheme? dynamicScheme}) {
+  final ColorScheme scheme =
+      dynamicScheme ??
+      ColorScheme.fromSeed(
+        seedColor: _brandSeed,
+        brightness: brightness,
+        dynamicSchemeVariant: DynamicSchemeVariant.tonalSpot,
+      );
+  final AppColors c = AppColors.fromScheme(scheme);
 
   final ThemeData base = ThemeData(
     useMaterial3: true,
@@ -284,7 +285,5 @@ ThemeData buildTheme(Brightness brightness) {
 }
 
 AppColors appColors(BuildContext context) {
-  return Theme.of(context).brightness == Brightness.dark
-      ? darkColors
-      : lightColors;
+  return AppColors.fromScheme(Theme.of(context).colorScheme);
 }

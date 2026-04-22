@@ -7,11 +7,9 @@ class LoginScreen extends StatefulWidget {
   const LoginScreen({
     super.key,
     required this.onLogin,
-    required this.onToggleTheme,
   });
 
   final VoidCallback onLogin;
-  final VoidCallback onToggleTheme;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -66,26 +64,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: <Widget>[
-                      Align(
-                        alignment: Alignment.topRight,
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: BackdropFilter(
-                            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                            child: Material(
-                              color: c.surface.withValues(alpha: 0.76),
-                              child: IconButton(
-                                onPressed: widget.onToggleTheme,
-                                icon: Icon(
-                                  dark
-                                      ? Icons.wb_sunny_outlined
-                                      : Icons.nightlight_outlined,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
                       const SizedBox(height: 6),
                       ClipRRect(
                         borderRadius: BorderRadius.circular(24),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:dynamic_color/dynamic_color.dart';
 
 import 'screens/login_screen.dart';
 import 'screens/main_shell.dart';
@@ -16,60 +17,55 @@ class SariFigmaApp extends StatefulWidget {
 }
 
 class _SariFigmaAppState extends State<SariFigmaApp> {
-  ThemeMode _mode = ThemeMode.light;
   bool _loggedIn = false;
   bool _showSplash = true;
 
-  void _toggleTheme() {
-    setState(() {
-      _mode = _mode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'Sari Figma Conversion',
-      themeMode: _mode,
-      theme: buildTheme(Brightness.light),
-      darkTheme: buildTheme(Brightness.dark),
-      home: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 420),
-        switchInCurve: Curves.easeOutCubic,
-        switchOutCurve: Curves.easeInCubic,
-        transitionBuilder: (Widget child, Animation<double> animation) {
-          final Animation<Offset> slide = Tween<Offset>(
-            begin: const Offset(0.03, 0.02),
-            end: Offset.zero,
-          ).animate(animation);
-          return FadeTransition(
-            opacity: animation,
-            child: SlideTransition(position: slide, child: child),
-          );
-        },
-        child: _showSplash
-            ? _StartupSplash(
-                key: const ValueKey<String>('splash'),
-                onFinished: () {
-                  if (!mounted) {
-                    return;
-                  }
-                  setState(() => _showSplash = false);
-                },
-              )
-            : (_loggedIn
-                  ? MainShell(
-                      key: const ValueKey<String>('main-shell'),
-                      onToggleTheme: _toggleTheme,
-                      onLogout: () => setState(() => _loggedIn = false),
-                    )
-                  : LoginScreen(
-                      key: const ValueKey<String>('login'),
-                      onToggleTheme: _toggleTheme,
-                      onLogin: () => setState(() => _loggedIn = true),
-                    )),
-      ),
+    return DynamicColorBuilder(
+      builder: (ColorScheme? lightDynamic, ColorScheme? darkDynamic) {
+        return MaterialApp(
+          debugShowCheckedModeBanner: false,
+          title: 'SarE',
+          themeMode: ThemeMode.system,
+          theme: buildTheme(Brightness.light, dynamicScheme: lightDynamic),
+          darkTheme: buildTheme(Brightness.dark, dynamicScheme: darkDynamic),
+          home: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 420),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            transitionBuilder: (Widget child, Animation<double> animation) {
+              final Animation<Offset> slide = Tween<Offset>(
+                begin: const Offset(0.03, 0.02),
+                end: Offset.zero,
+              ).animate(animation);
+              return FadeTransition(
+                opacity: animation,
+                child: SlideTransition(position: slide, child: child),
+              );
+            },
+            child: _showSplash
+                ? _StartupSplash(
+                    key: const ValueKey<String>('splash'),
+                    onFinished: () {
+                      if (!mounted) {
+                        return;
+                      }
+                      setState(() => _showSplash = false);
+                    },
+                  )
+                : (_loggedIn
+                      ? MainShell(
+                          key: const ValueKey<String>('main-shell'),
+                          onLogout: () => setState(() => _loggedIn = false),
+                        )
+                      : LoginScreen(
+                          key: const ValueKey<String>('login'),
+                          onLogin: () => setState(() => _loggedIn = true),
+                        )),
+          ),
+        );
+      },
     );
   }
 }

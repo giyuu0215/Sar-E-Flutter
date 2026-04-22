@@ -13,11 +13,9 @@ import 'transactions_screen.dart';
 class MainShell extends StatefulWidget {
   const MainShell({
     super.key,
-    required this.onToggleTheme,
     required this.onLogout,
   });
 
-  final VoidCallback onToggleTheme;
   final VoidCallback onLogout;
 
   @override
@@ -52,14 +50,6 @@ class _MainShellState extends State<MainShell> {
           fit: BoxFit.contain,
         ),
         actions: <Widget>[
-          _HeaderActionButton(
-            tooltip: 'Theme',
-            icon: Theme.of(context).brightness == Brightness.dark
-                ? Icons.wb_sunny_outlined
-                : Icons.nightlight_outlined,
-            iconColor: c.primary,
-            onTap: widget.onToggleTheme,
-          ),
           _HeaderActionButton(
             tooltip: 'Notifications',
             icon: Icons.notifications_none_rounded,
