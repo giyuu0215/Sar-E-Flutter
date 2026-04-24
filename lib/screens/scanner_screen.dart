@@ -50,33 +50,35 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
     final TextEditingController mobileCtrl = TextEditingController();
     String method = cart.paymentMethod;
     String? cashError;
-    // Load all configured QR paths
+    // Load all configured QR entries (decoded data strings)
     final SharedPreferences prefs = await SharedPreferences.getInstance();
+
+    // Static defaults
+    final List<String> staticKeys = <String>['qr_gcash', 'qr_maya', 'qr_maribank'];
+    final Map<String, String> staticLabels = <String, String>{
+      'qr_gcash': 'GCash', 'qr_maya': 'Maya', 'qr_maribank': 'MariBank',
+    };
+    // Dynamic extras
+    final int extraCount = prefs.getInt('qr_extra_count') ?? 0;
+
     final List<Map<String, String?>> qrEntries = <Map<String, String?>>[
-      <String, String?>{
-        'key': 'qr_gcash',
-        'label': prefs.getString('qr_gcash_label') ?? 'GCash',
-        'path': prefs.getString('qr_gcash_path') ?? prefs.getString('paymentQrPath'),
-      },
-      <String, String?>{
-        'key': 'qr_maya',
-        'label': prefs.getString('qr_maya_label') ?? 'Maya',
-        'path': prefs.getString('qr_maya_path'),
-      },
-      <String, String?>{
-        'key': 'qr_maribank',
-        'label': prefs.getString('qr_maribank_label') ?? 'MariBank',
-        'path': prefs.getString('qr_maribank_path'),
-      },
-      <String, String?>{
-        'key': 'qr_other',
-        'label': prefs.getString('qr_other_label') ?? 'Other',
-        'path': prefs.getString('qr_other_path'),
-      },
+      for (final String k in staticKeys)
+        <String, String?>{
+          'key': k,
+          'label': prefs.getString('${k}_label') ?? staticLabels[k],
+          'data': prefs.getString('${k}_qrdata'),
+        },
+      for (int i = 0; i < extraCount; i++)
+        <String, String?>{
+          'key': 'qr_extra_$i',
+          'label': prefs.getString('qr_extra_${i}_label') ?? 'Other ${i + 1}',
+          'data': prefs.getString('qr_extra_${i}_qrdata'),
+        },
     ].where((Map<String, String?> e) {
-      final String? p = e['path'];
-      return p != null && File(p).existsSync();
+      final String? d = e['data'];
+      return d != null && d.isNotEmpty;
     }).toList();
+
     String? selectedQrKey =
         qrEntries.isNotEmpty ? qrEntries.first['key'] : null;
 
@@ -205,7 +207,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                             }).toList(),
                           ),
                         const SizedBox(height: 8),
-                        // Display selected QR
+                        // Display selected regenerated QR
                         Builder(builder: (BuildContext _) {
                           final Map<String, String?>? entry =
                               qrEntries.cast<Map<String, String?>?>()
@@ -214,14 +216,60 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                                         e!['key'] == selectedQrKey,
                                     orElse: () => qrEntries.first,
                                   );
-                          final String? path = entry?['path'];
-                          if (path == null) return const SizedBox.shrink();
+                          final String? rawData = entry?['data'];
+                          if (rawData == null) return const SizedBox.shrink();
+
+                          // If it's a fallback image path
+                          if (rawData.startsWith('IMAGE:')) {
+                            final String imgPath = rawData.substring(6);
+                            return Center(
+                              child: Column(children: <Widget>[
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Image.file(File(imgPath),
+                                      height: 200, fit: BoxFit.contain),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Customer scans & enters ₱${total.toStringAsFixed(2)}',
+                                  style: TextStyle(
+                                      color: c.textSecondary, fontSize: 13),
+                                ),
+                              ]),
+                            );
+                          }
+
+                          // Regenerated brand-colored QR
                           return Center(
                             child: Column(children: <Widget>[
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(12),
-                                child: Image.file(File(path),
-                                    height: 200, fit: BoxFit.contain),
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: c.primary.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(
+                                      color: c.primary
+                                          .withValues(alpha: 0.25)),
+                                ),
+                                child: SizedBox(
+                                  width: 200,
+                                  height: 200,
+                                  child: QrImageView(
+                                    data: rawData,
+                                    version: QrVersions.auto,
+                                    size: 200,
+                                    backgroundColor: Colors.transparent,
+                                    eyeStyle: QrEyeStyle(
+                                      eyeShape: QrEyeShape.square,
+                                      color: c.primaryDark,
+                                    ),
+                                    dataModuleStyle: QrDataModuleStyle(
+                                      dataModuleShape:
+                                          QrDataModuleShape.square,
+                                      color: c.primaryDark,
+                                    ),
+                                  ),
+                                ),
                               ),
                               const SizedBox(height: 8),
                               Text(
@@ -316,7 +364,13 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
     Map<String, dynamic> data = <String, dynamic>{};
     List<dynamic> items = <dynamic>[];
     try {
-      data = jsonDecode(receipt.qrPayload) as Map<String, dynamic>;
+      // New format: human-readable text then ##JSON##<jsonstring>
+      // Old format: raw JSON (backwards compat)
+      final String payload = receipt.qrPayload;
+      final int sepIdx = payload.indexOf('##JSON##');
+      final String jsonStr =
+          sepIdx >= 0 ? payload.substring(sepIdx + 8) : payload;
+      data = jsonDecode(jsonStr) as Map<String, dynamic>;
       items = (data['items'] as List<dynamic>?) ?? <dynamic>[];
     } catch (_) {}
 

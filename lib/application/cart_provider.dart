@@ -7,7 +7,9 @@ import '../data/local/daos/product_dao.dart';
 import '../data/local/daos/transaction_dao.dart';
 import '../domain/entities/product.dart';
 import '../domain/entities/transaction.dart';
+import 'analytics_provider.dart';
 import 'auth_provider.dart';
+import 'inventory_provider.dart';
 import 'sync_provider.dart';
 
 const Uuid _uuid = Uuid();
@@ -213,6 +215,7 @@ class CartNotifier extends Notifier<CartState> {
         confirmedAt: isCash ? now : null,
       );
 
+      // Build JSON data (for internal parsing in the receipt dialog)
       final Map<String, dynamic> qrData = <String, dynamic>{
         'receipt_id': receiptId,
         'transaction_id': txnId,
@@ -229,12 +232,35 @@ class CartNotifier extends Notifier<CartState> {
             .toList(),
       };
 
+      // Build a human-readable text receipt for the QR code.
+      // When a customer scans the QR, they see a proper formatted receipt.
+      final StringBuffer receiptText = StringBuffer();
+      receiptText.writeln('=== SAR-E RECEIPT ===');
+      receiptText.writeln(storeName);
+      receiptText.writeln('Date: ${now.year}-${now.month.toString().padLeft(2,'0')}-${now.day.toString().padLeft(2,'0')} ${now.hour.toString().padLeft(2,'0')}:${now.minute.toString().padLeft(2,'0')}');
+      receiptText.writeln('Receipt #: ${receiptId.substring(0, 8).toUpperCase()}');
+      receiptText.writeln('---------------------');
+      for (final CartItem ci in state.items) {
+        final String line =
+            '${ci.qty}x ${ci.product.name}  ₱${ci.subtotal.toStringAsFixed(2)}';
+        receiptText.writeln(line);
+      }
+      receiptText.writeln('---------------------');
+      receiptText.writeln('TOTAL: ₱${state.total.toStringAsFixed(2)}');
+      receiptText.writeln('Payment: ${state.paymentMethod.toUpperCase()}');
+      if (state.paymentMethod == 'cash' && state.changeDue > 0) {
+        receiptText.writeln('Change: ₱${state.changeDue.toStringAsFixed(2)}');
+      }
+      receiptText.writeln('=== THANK YOU! ===');
+      // Append JSON for internal parsing (hidden after a separator)
+      receiptText.write('\n##JSON##${jsonEncode(qrData)}');
+
       final Receipt receipt = Receipt(
         receiptId: receiptId,
         transactionId: txnId,
         storeName: storeName,
         timestamp: now,
-        qrPayload: jsonEncode(qrData),
+        qrPayload: receiptText.toString(),
         customerMobile: state.customerMobile,
         deliveryStatus: 'pending',
       );
@@ -262,6 +288,12 @@ class CartNotifier extends Notifier<CartState> {
       }
 
       state = CartState(lastReceipt: receipt, isProcessing: false);
+
+      // Refresh inventory so stock changes are visible immediately (fixes A & E)
+      ref.invalidate(inventoryProvider);
+      // Refresh analytics so chart & KPIs update without tab switch (fixes D)
+      ref.invalidate(analyticsProvider);
+
       return true;
     } catch (e) {
       state = state.copyWith(isProcessing: false, error: 'Checkout failed: $e');

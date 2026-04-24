@@ -208,14 +208,14 @@ class _SetupScreenState extends ConsumerState<SetupScreen>
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             // Logo
-            Container(
-              width: 90,
-              height: 90,
-              decoration: BoxDecoration(
-                color: c.primary.withValues(alpha: 0.12),
-                shape: BoxShape.circle,
+            ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: Image.asset(
+                'assets/images/sare_logo.png',
+                width: 96,
+                height: 96,
+                fit: BoxFit.contain,
               ),
-              child: Icon(Icons.store_rounded, size: 48, color: c.primary),
             ),
             const SizedBox(height: 24),
             Text('Welcome to Sar-E',

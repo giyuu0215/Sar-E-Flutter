@@ -109,9 +109,13 @@ class _AnalyticsContent extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final AppColors c = appColors(context);
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 90),
-      child: Column(
+    return RefreshIndicator(
+      onRefresh: () async =>
+          ref.read(analyticsProvider.notifier).refresh(),
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 90),
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           // Header
@@ -399,6 +403,7 @@ class _AnalyticsContent extends ConsumerWidget {
             }),
           ],
         ],
+        ),
       ),
     );
   }

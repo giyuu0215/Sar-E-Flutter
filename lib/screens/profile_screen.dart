@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../application/auth_provider.dart';
@@ -20,37 +22,54 @@ class ProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
-  // key → SharedPreferences key, label → display name
-  static const List<Map<String, String>> _qrSlots = <Map<String, String>>[
+  // Default fixed slots — always present, only 'other_N' slots are deletable
+  static const List<Map<String, String>> _defaultSlots = <Map<String, String>>[
     <String, String>{'key': 'qr_gcash', 'label': 'GCash'},
     <String, String>{'key': 'qr_maya', 'label': 'Maya'},
     <String, String>{'key': 'qr_maribank', 'label': 'MariBank'},
-    <String, String>{'key': 'qr_other', 'label': 'Other'},
   ];
 
-  final Map<String, String?> _qrPaths = <String, String?>{};
-  final Map<String, String> _otherLabels = <String, String>{};
+  // Mutable list — default slots + dynamically added ones
+  List<Map<String, String>> _qrSlots = <Map<String, String>>[];
+  // key → decoded QR data string (from scanning the uploaded image)
+  final Map<String, String?> _qrData = <String, String?>{};
+  // key → display label
+  final Map<String, String> _labels = <String, String>{};
 
   @override
   void initState() {
     super.initState();
-    _loadQrPaths();
+    _loadQrData();
   }
 
-  Future<void> _loadQrPaths() async {
+  Future<void> _loadQrData() async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
+
+    // Load dynamic extra slots (stored as 'qr_extra_count' + 'qr_extra_N_key')
+    final int extraCount = prefs.getInt('qr_extra_count') ?? 0;
+    final List<Map<String, String>> slots = <Map<String, String>>[
+      ..._defaultSlots,
+      for (int i = 0; i < extraCount; i++)
+        <String, String>{
+          'key': 'qr_extra_$i',
+          'label': prefs.getString('qr_extra_${i}_label') ?? 'Other ${i + 1}',
+        },
+    ];
+
+    final Map<String, String?> data = <String, String?>{};
+    final Map<String, String> labels = <String, String>{};
+    for (final Map<String, String> slot in slots) {
+      final String k = slot['key']!;
+      // Try new decoded-data key first, fall back to legacy path for migration
+      data[k] = prefs.getString('${k}_qrdata');
+      labels[k] = prefs.getString('${k}_label') ?? slot['label']!;
+    }
+
     setState(() {
-      for (final Map<String, String> slot in _qrSlots) {
-        _qrPaths[slot['key']!] = prefs.getString('${slot['key']!}_path');
-        _otherLabels[slot['key']!] =
-            prefs.getString('${slot['key']!}_label') ?? slot['label']!;
-      }
-      // Migrate legacy single QR
-      final String? legacy = prefs.getString('paymentQrPath');
-      if (legacy != null && _qrPaths['qr_gcash'] == null) {
-        _qrPaths['qr_gcash'] = legacy;
-      }
+      _qrSlots = slots;
+      _qrData.addAll(data);
+      _labels.addAll(labels);
     });
   }
 
@@ -60,27 +79,53 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
+  /// Pick QR image → auto-scan to extract QR data → store decoded string
   Future<void> _pickQr(String key) async {
     final ImagePicker picker = ImagePicker();
     final XFile? file =
-        await picker.pickImage(source: ImageSource.gallery, imageQuality: 90);
+        await picker.pickImage(source: ImageSource.gallery, imageQuality: 95);
     if (file == null) return;
+
+    _showMessage('Scanning QR from image…');
+
+    // Use mobile_scanner to decode the QR from the image file
+    String? decoded;
+    try {
+      final MobileScannerController ctrl = MobileScannerController();
+      final BarcodeCapture? capture = await ctrl.analyzeImage(file.path);
+      await ctrl.dispose();
+      decoded = capture?.barcodes.firstOrNull?.rawValue;
+    } catch (e) {
+      debugPrint('QR scan from image failed: $e');
+    }
+
     final SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setString('${key}_path', file.path);
-    if (mounted) setState(() => _qrPaths[key] = file.path);
-    _showMessage('QR updated');
+    if (decoded != null && decoded.isNotEmpty) {
+      await prefs.setString('${key}_qrdata', decoded);
+      if (mounted) {
+        setState(() => _qrData[key] = decoded);
+        _showMessage('QR scanned & saved ✅');
+      }
+    } else {
+      // Fallback: store image path as raw data for display
+      await prefs.setString('${key}_qrdata', 'IMAGE:${file.path}');
+      if (mounted) {
+        setState(() => _qrData[key] = 'IMAGE:${file.path}');
+        _showMessage('Could not decode QR — image saved as-is');
+      }
+    }
   }
 
   Future<void> _removeQr(String key) async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.remove('${key}_path');
-    if (mounted) setState(() => _qrPaths[key] = null);
+    await prefs.remove('${key}_qrdata');
+    if (mounted) setState(() => _qrData[key] = null);
     _showMessage('QR removed');
   }
 
-  Future<void> _setOtherLabel(String key) async {
+  Future<void> _renameSlot(String key) async {
     final TextEditingController ctrl =
-        TextEditingController(text: _otherLabels[key] ?? 'Other');
+        TextEditingController(text: _labels[key] ?? 'Other');
     await showDialog<void>(
       context: context,
       builder: (BuildContext ctx) => AlertDialog(
@@ -100,15 +145,93 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               final SharedPreferences prefs =
                   await SharedPreferences.getInstance();
               await prefs.setString('${key}_label', ctrl.text.trim());
-              if (mounted) {
-                setState(() => _otherLabels[key] = ctrl.text.trim());
-              }
+              if (mounted) setState(() => _labels[key] = ctrl.text.trim());
             },
             child: const Text('Save'),
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _addQrSlot() async {
+    final TextEditingController ctrl = TextEditingController();
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext ctx) => AlertDialog(
+        title: const Text('Add Payment Option'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Name',
+            hintText: 'e.g. BDO, BPI, Palawan, Instapay',
+          ),
+        ),
+        actions: <Widget>[
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () async {
+              final String name = ctrl.text.trim();
+              if (name.isEmpty) return;
+              Navigator.pop(ctx);
+              final SharedPreferences prefs =
+                  await SharedPreferences.getInstance();
+              final int count = prefs.getInt('qr_extra_count') ?? 0;
+              final String newKey = 'qr_extra_$count';
+              await prefs.setInt('qr_extra_count', count + 1);
+              await prefs.setString('${newKey}_label', name);
+              if (mounted) {
+                setState(() {
+                  _qrSlots.add(<String, String>{
+                    'key': newKey,
+                    'label': name,
+                  });
+                  _qrData[newKey] = null;
+                  _labels[newKey] = name;
+                });
+              }
+            },
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteSlot(String key) async {
+    final bool? ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Remove slot?'),
+        content: Text('Remove "${_labels[key]}" payment option?'),
+        actions: <Widget>[
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+                backgroundColor: appColors(context).error,
+                foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.remove('${key}_qrdata');
+    await prefs.remove('${key}_label');
+    if (mounted) {
+      setState(() {
+        _qrSlots.removeWhere((Map<String, String> s) => s['key'] == key);
+        _qrData.remove(key);
+        _labels.remove(key);
+      });
+    }
   }
 
   Future<void> _changeStoreName() async {
@@ -452,21 +575,28 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                const ListTile(
-                  leading: Icon(Icons.qr_code_2),
-                  title: Text('Payment QR Codes',
+                ListTile(
+                  leading: const Icon(Icons.qr_code_2),
+                  title: const Text('Payment QR Codes',
                       style: TextStyle(fontWeight: FontWeight.w600)),
-                  subtitle: Text(
-                      'Customer scans these at checkout. Add GCash, Maya, MariBank, or any bank QR.',
+                  subtitle: const Text(
+                      'Upload your GCash/Maya/bank QR — Sar-E auto-regenerates it in brand colors.',
                       style: TextStyle(fontSize: 12)),
+                  trailing: IconButton(
+                    onPressed: _addQrSlot,
+                    icon: const Icon(Icons.add_circle_outline),
+                    tooltip: 'Add payment option',
+                  ),
                 ),
                 const Divider(height: 1),
                 ...List<Widget>.generate(_qrSlots.length, (int i) {
                   final String key = _qrSlots[i]['key']!;
-                  final String defaultLabel = _qrSlots[i]['label']!;
-                  final String label = _otherLabels[key] ?? defaultLabel;
-                  final String? path = _qrPaths[key];
-                  final bool hasQr = path != null && File(path).existsSync();
+                  final String label = _labels[key] ?? _qrSlots[i]['label']!;
+                  final String? data = _qrData[key];
+                  final bool hasQr =
+                      data != null && data.isNotEmpty && !data.startsWith('IMAGE:');
+                  final bool hasImage = data != null && data.startsWith('IMAGE:');
+                  final bool isDeletable = key.startsWith('qr_extra_');
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
@@ -480,49 +610,121 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           size: 20,
                         ),
                         title: Text(label,
-                            style: const TextStyle(fontWeight: FontWeight.w600)),
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w600)),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: <Widget>[
-                            if (key == 'qr_other')
-                              IconButton(
-                                onPressed: () => _setOtherLabel(key),
-                                icon: const Icon(Icons.edit_outlined, size: 18),
-                                tooltip: 'Rename',
-                              ),
+                            IconButton(
+                              onPressed: () => _renameSlot(key),
+                              icon: const Icon(Icons.edit_outlined, size: 18),
+                              tooltip: 'Rename',
+                            ),
                             IconButton(
                               onPressed: () => _pickQr(key),
                               icon: Icon(
-                                hasQr
+                                hasQr || hasImage
                                     ? Icons.swap_horiz
                                     : Icons.add_photo_alternate_outlined,
                                 size: 18,
                               ),
                               tooltip: hasQr ? 'Change QR' : 'Upload QR',
                             ),
-                            if (hasQr)
+                            if (hasQr || hasImage)
                               IconButton(
                                 onPressed: () => _removeQr(key),
                                 icon: Icon(Icons.delete_outline,
                                     color: c.error, size: 18),
-                                tooltip: 'Remove',
+                                tooltip: 'Remove QR',
+                              ),
+                            if (isDeletable)
+                              IconButton(
+                                onPressed: () => _deleteSlot(key),
+                                icon: Icon(Icons.remove_circle_outline,
+                                    color: c.error, size: 18),
+                                tooltip: 'Delete slot',
                               ),
                           ],
                         ),
                       ),
+                      // Show regenerated QR if we have decoded data
                       if (hasQr) ...<Widget>[
                         Center(
                           child: Padding(
-                            padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: Image.file(File(path),
-                                  height: 140, fit: BoxFit.contain),
+                            padding:
+                                const EdgeInsets.fromLTRB(24, 0, 24, 12),
+                            child: Column(
+                              children: <Widget>[
+                                Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color:
+                                        c.primary.withValues(alpha: 0.08),
+                                    borderRadius:
+                                        BorderRadius.circular(14),
+                                    border: Border.all(
+                                        color: c.primary
+                                            .withValues(alpha: 0.25)),
+                                  ),
+                                  child: SizedBox(
+                                    width: 160,
+                                    height: 160,
+                                    child: QrImageView(
+                                      data: data!,
+                                      version: QrVersions.auto,
+                                      size: 160,
+                                      backgroundColor: Colors.transparent,
+                                      eyeStyle: QrEyeStyle(
+                                        eyeShape: QrEyeShape.square,
+                                        color: c.primaryDark,
+                                      ),
+                                      dataModuleStyle: QrDataModuleStyle(
+                                        dataModuleShape:
+                                            QrDataModuleShape.square,
+                                        color: c.primaryDark,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Regenerated from your $label QR',
+                                  style: TextStyle(
+                                      color: c.textTertiary,
+                                      fontSize: 11),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ] else if (hasImage) ...<Widget>[
+                        // Fallback: show original image if QR couldn't be decoded
+                        Center(
+                          child: Padding(
+                            padding:
+                                const EdgeInsets.fromLTRB(24, 0, 24, 12),
+                            child: Column(
+                              children: <Widget>[
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Image.file(
+                                      File(data!.substring(6)),
+                                      height: 140,
+                                      fit: BoxFit.contain),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'QR could not be auto-decoded — showing image',
+                                  style: TextStyle(
+                                      color: c.warning, fontSize: 11),
+                                ),
+                              ],
                             ),
                           ),
                         ),
                       ],
-                      if (i < _qrSlots.length - 1) const Divider(height: 1),
+                      if (i < _qrSlots.length - 1)
+                        const Divider(height: 1),
                     ],
                   );
                 }),

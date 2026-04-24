@@ -135,6 +135,11 @@ class TransactionDao {
   /// Returns daily revenue/cogs for the last N days (for chart).
   Future<List<Map<String, dynamic>>> getDailyChart(int days) async {
     final Database db = await _db;
+    // Compute start in local time — SQLite datetime('now') is UTC which
+    // causes a timezone mismatch when transactions are stored as local ISO8601.
+    final String startIso = DateTime.now()
+        .subtract(Duration(days: days))
+        .toIso8601String();
     return db.rawQuery('''
       SELECT
         date(t.timestamp) AS day,
@@ -147,9 +152,9 @@ class TransactionDao {
         ), 0) AS cogs
       FROM transactions t
       WHERE t.status = 'completed'
-        AND t.timestamp >= datetime('now', '-$days days')
+        AND t.timestamp >= ?
       GROUP BY date(t.timestamp)
       ORDER BY day ASC
-    ''');
+    ''', <String>[startIso]);
   }
 }

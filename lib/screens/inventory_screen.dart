@@ -396,9 +396,12 @@ class _InventoryContentState extends ConsumerState<_InventoryContent> {
     final InventoryState state = widget.state;
     final List<Product> filtered = state.filtered;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 90),
-      child: Column(
+    return RefreshIndicator(
+      onRefresh: () async => ref.invalidate(inventoryProvider),
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 90),
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           // Header row
@@ -640,6 +643,7 @@ class _InventoryContentState extends ConsumerState<_InventoryContent> {
               );
             }),
         ],
+        ),
       ),
     );
   }

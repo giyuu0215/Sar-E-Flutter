@@ -31,21 +31,31 @@ class TransactionsScreen extends ConsumerWidget {
         error: (Object e, _) => Center(child: Text('Error: $e')),
         data: (List<Transaction> txns) {
           if (txns.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  Icon(Icons.receipt_long_outlined,
-                      size: 56, color: c.textTertiary),
-                  const SizedBox(height: 12),
-                  Text('No transactions yet',
-                      style: TextStyle(color: c.textSecondary)),
-                ],
-              ),
-            );
+          return RefreshIndicator(
+            onRefresh: () async => ref.invalidate(allTransactionsProvider),
+            child: ListView(
+              children: <Widget>[
+                const SizedBox(height: 80),
+                Icon(Icons.receipt_long_outlined,
+                    size: 56, color: c.textTertiary),
+                const SizedBox(height: 12),
+                Text('No transactions yet',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: c.textSecondary)),
+                const SizedBox(height: 12),
+                Center(
+                  child: Text('Pull to refresh',
+                      style:
+                          TextStyle(color: c.textTertiary, fontSize: 12)),
+                ),
+              ],
+            ),
+          );
           }
 
-          return ListView.builder(
+          return RefreshIndicator(
+            onRefresh: () async => ref.invalidate(allTransactionsProvider),
+            child: ListView.builder(
             padding: const EdgeInsets.all(14),
             itemCount: txns.length,
             itemBuilder: (BuildContext context, int i) {
@@ -101,7 +111,7 @@ class TransactionsScreen extends ConsumerWidget {
                 ),
               );
             },
-          );
+          ));
         },
       ),
     );
