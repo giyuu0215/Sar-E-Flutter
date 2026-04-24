@@ -41,8 +41,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final AuthState auth =
         ref.watch(authProvider).value ?? const AuthState();
 
-    // Grab the store name from SQLite-cached user (may be null on first load).
-    final String storeName = auth.user?.storeName ?? 'your store';
+    // storeNameHint is populated even when logged out (loaded from DB in build())
+    final String storeName = auth.storeNameHint ?? 'My Store';
 
     return Scaffold(
       body: LiquidBackground(
@@ -235,8 +235,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             ],
                           ),
                           const SizedBox(height: 16),
+                          // Contextual PIN recovery hint
                           Text(
-                            'Forgot PIN? Contact your store owner.',
+                            auth.isOfflineMode
+                                ? 'Forgot PIN? Reinstall the app to reset (offline — no cloud backup).'
+                                : 'Forgot PIN? Sign in with Google again to restore access.',
+                            textAlign: TextAlign.center,
                             style: TextStyle(
                                 color: c.textTertiary, fontSize: 12),
                           ),

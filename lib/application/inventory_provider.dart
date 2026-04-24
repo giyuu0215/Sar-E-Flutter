@@ -1,9 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../data/local/daos/product_dao.dart';
 import '../domain/entities/category.dart';
 import '../domain/entities/product.dart';
+import 'auth_provider.dart';
+import 'sync_provider.dart';
 
 const Uuid _uuid = Uuid();
 
@@ -20,7 +23,7 @@ class InventoryState {
   final List<Category> categories;
   final bool isLoading;
   final String searchQuery;
-  final String? selectedCategory; // category_id or null = all
+  final String? selectedCategory;
 
   List<Product> get filtered {
     Iterable<Product> list = products;
@@ -29,15 +32,12 @@ class InventoryState {
     }
     if (searchQuery.isNotEmpty) {
       final String q = searchQuery.toLowerCase();
-      list = list.where(
-          (Product p) => p.name.toLowerCase().contains(q));
+      list = list.where((Product p) => p.name.toLowerCase().contains(q));
     }
     return list.toList();
   }
 
-  int get lowStockCount =>
-      products.where((Product p) => p.isLowStock).length;
-
+  int get lowStockCount => products.where((Product p) => p.isLowStock).length;
   double get totalValue => products.fold<double>(
       0, (double s, Product p) => s + p.unitPrice * p.stockQty);
 
@@ -62,10 +62,11 @@ class InventoryState {
 class InventoryNotifier extends AsyncNotifier<InventoryState> {
   final ProductDao _dao = ProductDao();
 
+  bool get _isOffline =>
+      ref.read(authProvider).value?.isOfflineMode ?? false;
+
   @override
-  Future<InventoryState> build() async {
-    return _load();
-  }
+  Future<InventoryState> build() async => _load();
 
   Future<InventoryState> _load() async {
     final List<Product> products = await _dao.getAllProducts();
@@ -74,15 +75,13 @@ class InventoryNotifier extends AsyncNotifier<InventoryState> {
   }
 
   Future<void> refresh() async {
-    state = AsyncData<InventoryState>(
-        state.value!.copyWith(isLoading: true));
+    state = AsyncData<InventoryState>(state.value!.copyWith(isLoading: true));
     final InventoryState s = await _load();
     state = AsyncData<InventoryState>(s);
   }
 
   void setSearch(String q) {
-    state = AsyncData<InventoryState>(
-        state.value!.copyWith(searchQuery: q));
+    state = AsyncData<InventoryState>(state.value!.copyWith(searchQuery: q));
   }
 
   void setCategory(String? categoryId) {
@@ -118,23 +117,50 @@ class InventoryNotifier extends AsyncNotifier<InventoryState> {
     );
     await _dao.insert(product);
     await _generateSuggestionFor(product);
+    if (!_isOffline) {
+      await SyncNotifier.enqueue(
+        entityType: 'products',
+        entityId: product.productId,
+        operation: 'create',
+        payload: product.toMap(),
+      );
+    }
     await refresh();
   }
 
   Future<void> updateProduct(Product product) async {
     await _dao.update(product);
     await _generateSuggestionFor(product);
+    if (!_isOffline) {
+      await SyncNotifier.enqueue(
+        entityType: 'products',
+        entityId: product.productId,
+        operation: 'update',
+        payload: product.toMap(),
+      );
+    }
     await refresh();
   }
 
-  /// Generates a cost-based price suggestion (cost × 1.25) for a single product.
-  /// Only inserts if the suggestion differs from the current price by > 5%.
+  Future<void> deleteProduct(String productId) async {
+    await _dao.deactivate(productId);
+    if (!_isOffline) {
+      await SyncNotifier.enqueue(
+        entityType: 'products',
+        entityId: productId,
+        operation: 'delete',
+        payload: <String, dynamic>{'product_id': productId},
+      );
+    }
+    await refresh();
+  }
+
   Future<void> _generateSuggestionFor(Product product) async {
     if (product.costPrice <= 0) return;
     final double suggested =
         double.parse((product.costPrice * 1.25).toStringAsFixed(2));
     final double diff = (suggested - product.unitPrice).abs();
-    if (diff / product.unitPrice < 0.05) return; // < 5% diff — skip
+    if (product.unitPrice > 0 && diff / product.unitPrice < 0.05) return;
     await _dao.insertPriceSuggestion(<String, dynamic>{
       'suggestion_id': _uuid.v4(),
       'product_id': product.productId,
@@ -144,7 +170,6 @@ class InventoryNotifier extends AsyncNotifier<InventoryState> {
     });
   }
 
-  /// Recalculates suggestions for ALL products. Call manually from UI if needed.
   Future<void> recalculateAllSuggestions() async {
     final List<Product> products = await _dao.getAllProducts();
     for (final Product p in products) {
@@ -155,11 +180,6 @@ class InventoryNotifier extends AsyncNotifier<InventoryState> {
 
   Future<void> updateStock(String productId, int newQty) async {
     await _dao.updateStock(productId, newQty);
-    await refresh();
-  }
-
-  Future<void> deleteProduct(String productId) async {
-    await _dao.deactivate(productId);
     await refresh();
   }
 
@@ -178,11 +198,27 @@ class InventoryNotifier extends AsyncNotifier<InventoryState> {
       createdAt: DateTime.now(),
     );
     await _dao.insertCategory(cat);
+    if (!_isOffline) {
+      await SyncNotifier.enqueue(
+        entityType: 'categories',
+        entityId: cat.categoryId,
+        operation: 'create',
+        payload: cat.toMap(),
+      );
+    }
     await refresh();
   }
 
   Future<void> deleteCategory(String categoryId) async {
     await _dao.deleteCategory(categoryId);
+    if (!_isOffline) {
+      await SyncNotifier.enqueue(
+        entityType: 'categories',
+        entityId: categoryId,
+        operation: 'delete',
+        payload: <String, dynamic>{'category_id': categoryId},
+      );
+    }
     await refresh();
   }
 }
@@ -191,3 +227,10 @@ final AsyncNotifierProvider<InventoryNotifier, InventoryState>
     inventoryProvider =
     AsyncNotifierProvider<InventoryNotifier, InventoryState>(
         InventoryNotifier.new);
+
+// Helper: check if a storeId looks like an offline UUID (not a Firebase UID)
+// Firebase UIDs are 28 chars; offline UUIDs are 36 chars (with dashes)
+Future<bool> isOfflineModeActive() async {
+  final SharedPreferences prefs = await SharedPreferences.getInstance();
+  return prefs.getBool('isOfflineMode') ?? false;
+}

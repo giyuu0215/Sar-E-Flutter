@@ -56,4 +56,10 @@ class UserDao {
         await db.rawQuery('SELECT COUNT(*) as c FROM user_credentials');
     return ((rows.first['c'] as int?) ?? 0) > 0;
   }
+
+  /// Removes all user records — used by Sign Out to fully reset the device.
+  Future<void> deleteAll() async {
+    final Database db = await _db;
+    await db.delete('user_credentials');
+  }
 }

@@ -1,6 +1,10 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../application/auth_provider.dart';
 import '../application/sync_provider.dart';
@@ -9,7 +13,6 @@ import '../theme/app_theme.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key, required this.onLogout});
-
   final VoidCallback onLogout;
 
   @override
@@ -17,15 +20,47 @@ class ProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
+  String? _paymentQrPath;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadQrPath();
+  }
+
+  Future<void> _loadQrPath() async {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(() => _paymentQrPath = prefs.getString('paymentQrPath'));
+    }
+  }
+
   void _showMessage(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
     );
   }
 
+  Future<void> _pickPaymentQr() async {
+    final ImagePicker picker = ImagePicker();
+    final XFile? file =
+        await picker.pickImage(source: ImageSource.gallery, imageQuality: 90);
+    if (file == null) return;
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setString('paymentQrPath', file.path);
+    if (mounted) setState(() => _paymentQrPath = file.path);
+    _showMessage('Payment QR updated');
+  }
+
+  Future<void> _removePaymentQr() async {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.remove('paymentQrPath');
+    if (mounted) setState(() => _paymentQrPath = null);
+    _showMessage('Payment QR removed');
+  }
+
   Future<void> _changeStoreName() async {
-    final UserCredential? user =
-        ref.read(authProvider).value?.user;
+    final UserCredential? user = ref.read(authProvider).value?.user;
     final TextEditingController ctrl =
         TextEditingController(text: user?.storeName ?? '');
     await showDialog<void>(
@@ -63,7 +98,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final TextEditingController newCtrl = TextEditingController();
     final TextEditingController confirmCtrl = TextEditingController();
     String? error;
-
     await showDialog<void>(
       context: context,
       builder: (BuildContext ctx) {
@@ -86,8 +120,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     controller: newCtrl,
                     obscureText: true,
                     keyboardType: TextInputType.number,
-                    decoration:
-                        const InputDecoration(labelText: 'New PIN'),
+                    decoration: const InputDecoration(labelText: 'New PIN'),
                   ),
                   const SizedBox(height: 10),
                   TextField(
@@ -127,9 +160,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       return;
                     }
                     Navigator.pop(ctx);
-                    await ref
-                        .read(authProvider.notifier)
-                        .changePin(newCtrl.text);
+                    await ref.read(authProvider.notifier).changePin(newCtrl.text);
                     _showMessage('PIN changed successfully');
                   },
                   style: ElevatedButton.styleFrom(
@@ -145,20 +176,83 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
+  /// Logout = end PIN session only. Store data & storeId preserved.
+  Future<void> _logout() async {
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Logout?'),
+        content: const Text(
+            'You\'ll be taken to the PIN screen. Your store data stays intact.'),
+        actions: <Widget>[
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+                backgroundColor: appColors(context).error,
+                foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Logout'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) widget.onLogout();
+  }
+
+  /// Sign Out = full reset. Different warning for offline vs Google-linked.
+  Future<void> _signOut() async {
+    final bool isOffline =
+        ref.read(authProvider).value?.isOfflineMode ?? false;
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext ctx) {
+        final AppColors c = appColors(ctx);
+        return AlertDialog(
+          title: Row(children: <Widget>[
+            Icon(Icons.warning_amber_rounded, color: c.error),
+            const SizedBox(width: 8),
+            const Text('Sign Out?'),
+          ]),
+          content: Text(
+            isOffline
+                ? '⚠️ OFFLINE ACCOUNT WARNING\n\nSigning out will permanently delete all local data — products, transactions, and settings.\n\nThere is NO cloud backup. This cannot be undone.'
+                : 'This will sign you out completely and remove your PIN from this device.\n\nYour products and transaction history are safely backed up in the cloud. Sign back in with the same Google account to restore everything.',
+            style: const TextStyle(fontSize: 13),
+          ),
+          actions: <Widget>[
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: appColors(ctx).error,
+                  foregroundColor: Colors.white),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(isOffline ? 'Delete & Sign Out' : 'Sign Out'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed == true && mounted) {
+      await ref.read(authProvider.notifier).signOut();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final AppColors c = appColors(context);
-    final AuthState auth =
-        ref.watch(authProvider).value ?? const AuthState();
-    final SyncState sync =
-        ref.watch(syncProvider).value ?? const SyncState();
+    final AuthState auth = ref.watch(authProvider).value ?? const AuthState();
+    final SyncState sync = ref.watch(syncProvider).value ?? const SyncState();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Profile & Settings')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: <Widget>[
-          // User card
+          // ── Store card ─────────────────────────────────────────────────
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -171,8 +265,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 CircleAvatar(
                   radius: 28,
                   backgroundColor: c.primary.withValues(alpha: 0.15),
-                  child: Icon(Icons.store_outlined,
-                      color: c.primary, size: 28),
+                  child: Icon(Icons.store_outlined, color: c.primary, size: 28),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -185,9 +278,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             fontWeight: FontWeight.w700, fontSize: 16),
                       ),
                       Text(
-                        auth.user?.role.toUpperCase() ?? 'OWNER',
-                        style: TextStyle(
-                            color: c.textSecondary, fontSize: 12),
+                        '${auth.user?.role.toUpperCase() ?? 'OWNER'}${auth.isOfflineMode ? ' · Offline' : ''}',
+                        style:
+                            TextStyle(color: c.textSecondary, fontSize: 12),
                       ),
                     ],
                   ),
@@ -201,77 +294,171 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           ),
           const SizedBox(height: 16),
 
-          // Sync status card
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: c.surface,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: c.border),
+          // ── Sync status ────────────────────────────────────────────────
+          if (!auth.isOfflineMode) ...<Widget>[
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: c.surface,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: c.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Row(children: <Widget>[
+                    Icon(
+                      sync.isOnline
+                          ? Icons.cloud_done_outlined
+                          : Icons.cloud_off_outlined,
+                      color: sync.isOnline ? c.info : c.textTertiary,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      sync.isOnline ? 'Online' : 'Offline',
+                      style: TextStyle(
+                        color: sync.isOnline ? c.info : c.textTertiary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const Spacer(),
+                    if (sync.pendingCount > 0)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: c.warning.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text('${sync.pendingCount} pending',
+                            style:
+                                TextStyle(color: c.warning, fontSize: 11)),
+                      ),
+                  ]),
+                  if (sync.lastSyncedAt != null) ...<Widget>[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Last sync: ${DateFormat('MMM d, h:mm a').format(sync.lastSyncedAt!)}',
+                      style:
+                          TextStyle(color: c.textSecondary, fontSize: 12),
+                    ),
+                  ],
+                  if (sync.lastError != null) ...<Widget>[
+                    const SizedBox(height: 4),
+                    Text('Error: ${sync.lastError}',
+                        style: TextStyle(color: c.error, fontSize: 11)),
+                  ],
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: sync.isSyncing
+                          ? null
+                          : () => ref.read(syncProvider.notifier).sync(),
+                      icon: sync.isSyncing
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2))
+                          : const Icon(Icons.sync),
+                      label: Text(
+                          sync.isSyncing ? 'Syncing...' : 'Sync Now'),
+                    ),
+                  ),
+                ],
+              ),
             ),
+            const SizedBox(height: 16),
+          ] else ...<Widget>[
+            // Offline mode notice
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: c.warning.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: c.warning.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: <Widget>[
+                  Icon(Icons.wifi_off_rounded, color: c.warning, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Offline mode — data is stored on this device only.',
+                      style: TextStyle(color: c.warning, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+
+          // ── Payment QR ─────────────────────────────────────────────────
+          Card(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Row(children: <Widget>[
-                  Icon(
-                    sync.isOnline ? Icons.cloud_done_outlined : Icons.cloud_off_outlined,
-                    color: sync.isOnline ? c.info : c.textTertiary,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    sync.isOnline ? 'Online' : 'Offline',
-                    style: TextStyle(
-                      color: sync.isOnline ? c.info : c.textTertiary,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const Spacer(),
-                  if (sync.pendingCount > 0)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: c.warning.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(8),
+                ListTile(
+                  leading: const Icon(Icons.qr_code_2),
+                  title: const Text('Payment QR Code',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: const Text(
+                      'GCash / Maya / InstaPay QR shown at checkout',
+                      style: TextStyle(fontSize: 12)),
+                ),
+                if (_paymentQrPath != null &&
+                    File(_paymentQrPath!).existsSync()) ...<Widget>[
+                  Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.file(File(_paymentQrPath!),
+                            height: 180, fit: BoxFit.contain),
                       ),
-                      child: Text('${sync.pendingCount} pending',
-                          style: TextStyle(
-                              color: c.warning, fontSize: 11)),
                     ),
-                ]),
-                if (sync.lastSyncedAt != null) ...<Widget>[
-                  const SizedBox(height: 4),
-                  Text(
-                    'Last sync: ${DateFormat('MMM d, h:mm a').format(sync.lastSyncedAt!)}',
-                    style:
-                        TextStyle(color: c.textSecondary, fontSize: 12),
+                  ),
+                  const SizedBox(height: 10),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      children: <Widget>[
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _pickPaymentQr,
+                            icon: const Icon(Icons.upload_outlined, size: 16),
+                            label: const Text('Change QR'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          onPressed: _removePaymentQr,
+                          icon: Icon(Icons.delete_outline, color: c.error),
+                          tooltip: 'Remove QR',
+                        ),
+                      ],
+                    ),
+                  ),
+                ] else ...<Widget>[
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    child: OutlinedButton.icon(
+                      onPressed: _pickPaymentQr,
+                      icon: const Icon(Icons.add_photo_alternate_outlined),
+                      label: const Text('Upload QR from Gallery'),
+                      style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(double.infinity, 44)),
+                    ),
                   ),
                 ],
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: sync.isSyncing
-                        ? null
-                        : () =>
-                            ref.read(syncProvider.notifier).sync(),
-                    icon: sync.isSyncing
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2))
-                        : const Icon(Icons.sync),
-                    label:
-                        Text(sync.isSyncing ? 'Syncing...' : 'Sync Now'),
-                  ),
-                ),
               ],
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
 
-          // Settings
+          // ── Settings tiles ─────────────────────────────────────────────
           Card(
             child: Column(
               children: <Widget>[
@@ -288,7 +475,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     title: const Text('Add Cashier'),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () async {
-                      final TextEditingController pinCtrl = TextEditingController();
+                      final TextEditingController pinCtrl =
+                          TextEditingController();
                       await showDialog<void>(
                         context: context,
                         builder: (BuildContext ctx) => AlertDialog(
@@ -297,22 +485,25 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             controller: pinCtrl,
                             obscureText: true,
                             keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(labelText: '4-digit PIN'),
+                            decoration:
+                                const InputDecoration(labelText: '4-digit PIN'),
                           ),
                           actions: <Widget>[
                             TextButton(
-                              onPressed: () => Navigator.pop(ctx),
-                              child: const Text('Cancel'),
-                            ),
+                                onPressed: () => Navigator.pop(ctx),
+                                child: const Text('Cancel')),
                             ElevatedButton(
                               onPressed: () async {
                                 if (pinCtrl.text.length < 4) return;
                                 Navigator.pop(ctx);
-                                await ref.read(authProvider.notifier).addCashier(pinCtrl.text);
-                                _showMessage('Cashier added successfully!');
+                                await ref
+                                    .read(authProvider.notifier)
+                                    .addCashier(pinCtrl.text);
+                                _showMessage('Cashier added!');
                               },
                               style: ElevatedButton.styleFrom(
-                                  backgroundColor: c.primary, foregroundColor: Colors.white),
+                                  backgroundColor: c.primary,
+                                  foregroundColor: Colors.white),
                               child: const Text('Add'),
                             ),
                           ],
@@ -322,37 +513,30 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   ),
                   const Divider(height: 1),
                 ],
+                // Logout — session only
                 ListTile(
                   leading: Icon(Icons.logout, color: c.error),
                   title: Text('Logout',
                       style: TextStyle(color: c.error)),
-                  onTap: () async {
-                    final bool? confirmed = await showDialog<bool>(
-                      context: context,
-                      builder: (_) => AlertDialog(
-                        title: const Text('Logout?'),
-                        content: const Text(
-                            'Are you sure you want to log out?'),
-                        actions: <Widget>[
-                          TextButton(
-                              onPressed: () =>
-                                  Navigator.pop(context, false),
-                              child: const Text('Cancel')),
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                                backgroundColor: c.error,
-                                foregroundColor: Colors.white),
-                            onPressed: () =>
-                                Navigator.pop(context, true),
-                            child: const Text('Logout'),
-                          ),
-                        ],
-                      ),
-                    );
-                    if (confirmed == true) {
-                      widget.onLogout();
-                    }
-                  },
+                  subtitle: const Text('Returns to PIN screen',
+                      style: TextStyle(fontSize: 12)),
+                  onTap: _logout,
+                ),
+                const Divider(height: 1),
+                // Sign Out — full reset
+                ListTile(
+                  leading:
+                      Icon(Icons.exit_to_app, color: c.error),
+                  title: Text('Sign Out',
+                      style: TextStyle(
+                          color: c.error, fontWeight: FontWeight.w700)),
+                  subtitle: Text(
+                    auth.isOfflineMode
+                        ? '⚠️ Clears all local data permanently'
+                        : 'Removes this device — sign back in to restore',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  onTap: _signOut,
                 ),
               ],
             ),

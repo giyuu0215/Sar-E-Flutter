@@ -7,20 +7,16 @@ import '../data/local/daos/product_dao.dart';
 import '../data/local/daos/transaction_dao.dart';
 import '../domain/entities/product.dart';
 import '../domain/entities/transaction.dart';
+import 'auth_provider.dart';
+import 'sync_provider.dart';
 
 const Uuid _uuid = Uuid();
 
 class CartItem {
-  const CartItem({
-    required this.product,
-    required this.qty,
-  });
-
+  const CartItem({required this.product, required this.qty});
   final Product product;
   final int qty;
-
   double get subtotal => product.unitPrice * qty;
-
   CartItem copyWith({int? qty}) =>
       CartItem(product: product, qty: qty ?? this.qty);
 }
@@ -39,7 +35,7 @@ class CartState {
   });
 
   final List<CartItem> items;
-  final String paymentMethod; // 'cash' | 'ewallet'
+  final String paymentMethod;
   final double? tenderedCash;
   final String? customerMobile;
   final String searchQuery;
@@ -91,6 +87,9 @@ class CartNotifier extends Notifier<CartState> {
   @override
   CartState build() => const CartState();
 
+  bool get _isOffline =>
+      ref.read(authProvider).value?.isOfflineMode ?? false;
+
   // ── Search ───────────────────────────────────────────────────────────────
 
   Future<void> search(String query) async {
@@ -107,11 +106,11 @@ class CartNotifier extends Notifier<CartState> {
 
   void addProduct(Product product) {
     final List<CartItem> items = List<CartItem>.from(state.items);
-    final int idx = items.indexWhere(
-        (CartItem i) => i.product.productId == product.productId);
+    final int idx = items
+        .indexWhere((CartItem i) => i.product.productId == product.productId);
     if (idx >= 0) {
       final CartItem existing = items[idx];
-      if (existing.qty >= product.stockQty) return; // respect stock
+      if (existing.qty >= product.stockQty) return;
       items[idx] = existing.copyWith(qty: existing.qty + 1);
     } else {
       if (product.stockQty <= 0) return;
@@ -130,50 +129,48 @@ class CartNotifier extends Notifier<CartState> {
 
   void changeQty(String productId, int delta) {
     final List<CartItem> items = List<CartItem>.from(state.items);
-    final int idx = items
-        .indexWhere((CartItem i) => i.product.productId == productId);
+    final int idx =
+        items.indexWhere((CartItem i) => i.product.productId == productId);
     if (idx < 0) return;
     final int newQty = items[idx].qty + delta;
     if (newQty <= 0) {
       items.removeAt(idx);
     } else if (newQty > items[idx].product.stockQty) {
-      return; // can't exceed stock
+      return;
     } else {
       items[idx] = items[idx].copyWith(qty: newQty);
     }
     state = state.copyWith(items: items);
   }
 
-  void clearCart() {
-    state = const CartState();
-  }
+  void clearCart() => state = const CartState();
 
-  void setPaymentMethod(String method) {
-    state = state.copyWith(paymentMethod: method, tenderedCash: null);
-  }
+  void setPaymentMethod(String method) =>
+      state = state.copyWith(paymentMethod: method, tenderedCash: null);
 
-  void setTenderedCash(double amount) {
-    state = state.copyWith(tenderedCash: amount);
-  }
+  void setTenderedCash(double amount) =>
+      state = state.copyWith(tenderedCash: amount);
 
-  void setCustomerMobile(String? mobile) {
-    state = state.copyWith(customerMobile: mobile);
-  }
+  void setCustomerMobile(String? mobile) =>
+      state = state.copyWith(customerMobile: mobile);
 
   // ── Checkout ─────────────────────────────────────────────────────────────
 
   Future<bool> checkout() async {
     if (state.isEmpty) return false;
     if (state.paymentMethod == 'cash') {
-      if (state.tenderedCash == null ||
-          state.tenderedCash! < state.total) {
+      if (state.tenderedCash == null || state.tenderedCash! < state.total) {
         state = state.copyWith(
-            error: 'Tendered cash must be ≥ total amount');
+            error: 'Cash tendered must be at least PHP ${state.total.toStringAsFixed(2)}');
         return false;
       }
     }
 
     state = state.copyWith(isProcessing: true, clearError: true);
+
+    // Grab store name from auth — uses actual store name, not hardcoded
+    final String storeName =
+        ref.read(authProvider).value?.user?.storeName ?? 'My Store';
 
     try {
       final String txnId = _uuid.v4();
@@ -215,11 +212,12 @@ class CartNotifier extends Notifier<CartState> {
         confirmedAt: isCash ? now : null,
       );
 
-      // Build QR payload (JSON with key receipt data)
       final Map<String, dynamic> qrData = <String, dynamic>{
         'receipt_id': receiptId,
         'transaction_id': txnId,
+        'store': storeName,
         'total': state.total,
+        'payment_method': state.paymentMethod,
         'timestamp': now.toIso8601String(),
         'items': state.items
             .map((CartItem ci) => <String, dynamic>{
@@ -233,22 +231,16 @@ class CartNotifier extends Notifier<CartState> {
       final Receipt receipt = Receipt(
         receiptId: receiptId,
         transactionId: txnId,
-        storeName: 'SarE Store',
+        storeName: storeName,
         timestamp: now,
         qrPayload: jsonEncode(qrData),
         customerMobile: state.customerMobile,
         deliveryStatus: 'pending',
       );
 
-      // Save all & decrement stock
       await _txnDao.insertCheckout(
-        txn: txn,
-        items: items,
-        payment: payment,
-        receipt: receipt,
-      );
+          txn: txn, items: items, payment: payment, receipt: receipt);
 
-      // Decrement stock in DB
       for (final CartItem ci in state.items) {
         await _productDao.updateStock(
           ci.product.productId,
@@ -256,14 +248,20 @@ class CartNotifier extends Notifier<CartState> {
         );
       }
 
-      state = CartState(
-        lastReceipt: receipt,
-        isProcessing: false,
-      );
+      // Enqueue sync (skip for offline stores)
+      if (!_isOffline) {
+        await SyncNotifier.enqueue(
+          entityType: 'transactions',
+          entityId: txnId,
+          operation: 'create',
+          payload: txn.toMap(),
+        );
+      }
+
+      state = CartState(lastReceipt: receipt, isProcessing: false);
       return true;
     } catch (e) {
-      state = state.copyWith(
-          isProcessing: false, error: 'Checkout failed: $e');
+      state = state.copyWith(isProcessing: false, error: 'Checkout failed: $e');
       return false;
     }
   }
