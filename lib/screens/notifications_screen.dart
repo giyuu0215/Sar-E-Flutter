@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
 
+import '../application/auth_provider.dart';
 import '../application/inventory_provider.dart';
 import '../application/listahan_provider.dart';
 import '../domain/entities/credit_entry.dart';
@@ -119,7 +120,7 @@ class NotificationsScreen extends ConsumerWidget {
                                 path: '09123456789', // Would use e.customerPhone if we added it to customer table
                                 queryParameters: <String, String>{
                                   'body':
-                                      'Hi ${e.customerName}, this is a gentle reminder regarding your overdue credit of PHP ${e.remaining.toStringAsFixed(2)} at our store. Please settle it as soon as possible.',
+                                      'Hi ${e.customerName}, this is a gentle reminder regarding your overdue credit of PHP ${e.remaining.toStringAsFixed(2)} at ${ref.read(authProvider).value?.user?.storeName ?? 'our store'}. Please settle it as soon as possible.',
                                 },
                               );
                               

@@ -250,12 +250,14 @@ class CartNotifier extends Notifier<CartState> {
 
       // Enqueue sync (skip for offline stores)
       if (!_isOffline) {
-        await SyncNotifier.enqueue(
-          entityType: 'transactions',
-          entityId: txnId,
-          operation: 'create',
-          payload: txn.toMap(),
-        );
+        try {
+          await SyncNotifier.enqueue(
+            entityType: 'transactions',
+            entityId: txnId,
+            operation: 'create',
+            payload: txn.toMap(),
+          );
+        } catch (_) {} // Non-fatal: sync will retry later
       }
 
       state = CartState(lastReceipt: receipt, isProcessing: false);
