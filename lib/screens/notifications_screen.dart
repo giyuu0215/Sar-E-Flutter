@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
 
 import '../application/inventory_provider.dart';
@@ -121,10 +122,15 @@ class NotificationsScreen extends ConsumerWidget {
                                       'Hi ${e.customerName}, this is a gentle reminder regarding your overdue credit of PHP ${e.remaining.toStringAsFixed(2)} at our store. Please settle it as soon as possible.',
                                 },
                               );
-                              // We just rely on the existing url_launcher in listahan if they navigate,
-                              // but here we can just show a snackbar redirecting them
+                              
+                              try {
+                                // Ignore failure, just try to launch
+                                // ignore: deprecated_member_use
+                                launchUrl(smsLaunchUri);
+                              } catch (_) {}
+                              
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Go to Listahan to send SMS reminders.')),
+                                const SnackBar(content: Text('Opening SMS app...')),
                               );
                               Navigator.pop(context);
                             },

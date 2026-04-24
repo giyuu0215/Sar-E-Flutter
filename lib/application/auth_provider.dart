@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_auth/firebase_auth.dart' as fb_auth;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:local_auth/local_auth.dart';
@@ -10,9 +10,6 @@ import 'package:uuid/uuid.dart';
 
 import '../data/local/daos/user_dao.dart';
 import '../domain/entities/user_credential.dart';
-
-const int _maxAttempts = 5;
-const Duration _lockDuration = Duration(minutes: 30);
 
 /// Hashes a PIN using SHA-256.
 String hashPin(String pin) {
@@ -58,7 +55,7 @@ class AuthState {
 class AuthNotifier extends AsyncNotifier<AuthState> {
   final UserDao _dao = UserDao();
   static const Uuid _uuid = Uuid();
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
+  bool _googleSignInInitialized = false;
   final LocalAuthentication _localAuth = LocalAuthentication();
 
   @override
@@ -74,22 +71,21 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
   Future<bool> linkStoreWithGoogle() async {
     state = const AsyncData<AuthState>(AuthState(isLoading: true));
     try {
-      final GoogleSignInAccount? gUser = await _googleSignIn.signIn();
-      if (gUser == null) {
-        state = AsyncData<AuthState>(state.value!.copyWith(
-          isLoading: false,
-          errorMessage: 'Google Sign-In canceled.',
-        ));
-        return false;
+      if (!_googleSignInInitialized) {
+        await GoogleSignIn.instance.initialize();
+        _googleSignInInitialized = true;
       }
-
+      final GoogleSignInAccount gUser = await GoogleSignIn.instance.authenticate();
+      
       final GoogleSignInAuthentication gAuth = gUser.authentication;
-      final OAuthCredential credential = GoogleAuthProvider.credential(
-        accessToken: gAuth.accessToken,
+      final GoogleSignInClientAuthorization gAuthz = await gUser.authorizationClient.authorizeScopes(['email']);
+      
+      final fb_auth.OAuthCredential credential = fb_auth.GoogleAuthProvider.credential(
+        accessToken: gAuthz.accessToken,
         idToken: gAuth.idToken,
       );
 
-      final UserCredential firebaseUser = await FirebaseAuth.instance.signInWithCredential(credential);
+      final fb_auth.UserCredential firebaseUser = await fb_auth.FirebaseAuth.instance.signInWithCredential(credential);
       final String storeId = firebaseUser.user!.uid;
 
       final SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -142,7 +138,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     try {
       final bool didAuthenticate = await _localAuth.authenticate(
         localizedReason: 'Please authenticate to access Sar-E',
-        options: const AuthenticationOptions(biometricOnly: true),
+        biometricOnly: true,
       );
 
       if (didAuthenticate) {
@@ -214,8 +210,10 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
   Future<void> clearStoreLink() async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.remove('storeId');
-    await FirebaseAuth.instance.signOut();
-    await _googleSignIn.signOut();
+    await fb_auth.FirebaseAuth.instance.signOut();
+    if (_googleSignInInitialized) {
+      await GoogleSignIn.instance.signOut();
+    }
     state = const AsyncData<AuthState>(AuthState(isFirstRun: true));
   }
 
