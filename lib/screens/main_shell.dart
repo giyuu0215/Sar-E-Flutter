@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../application/auth_provider.dart';
+import '../application/analytics_provider.dart';
 import '../application/inventory_provider.dart';
 import '../application/listahan_provider.dart';
 import '../theme/app_theme.dart';
@@ -116,8 +117,13 @@ class _MainShellState extends ConsumerState<MainShell> {
       bottomNavigationBar: isOwner 
         ? NavigationBar(
             selectedIndex: _index,
-            onDestinationSelected: (int value) =>
-                setState(() => _index = value),
+            onDestinationSelected: (int value) {
+                setState(() => _index = value);
+                // Force analytics to reload whenever the tab is opened
+                if (value == 3) {
+                  ref.invalidate(analyticsProvider);
+                }
+              },
             destinations: const <NavigationDestination>[
               NavigationDestination(
                 icon: Icon(Icons.point_of_sale_outlined),

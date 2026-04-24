@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../application/auth_provider.dart';
 import '../application/listahan_provider.dart';
 import '../domain/entities/credit_entry.dart';
 import '../domain/entities/customer.dart';
@@ -595,7 +596,8 @@ class _ListahanContentState extends ConsumerState<_ListahanContent> {
                               IconButton.filledTonal(
                                 onPressed: () async {
                                   final double amt = entry.remaining;
-                                  final String msg = 'Hi ${entry.customerName}, reminder for your balance of PHP ${amt.toStringAsFixed(2)} at Sar-E store. Thank you!';
+                                  final String storeName = ref.read(authProvider).value?.user?.storeName ?? 'our store';
+                                  final String msg = 'Hi ${entry.customerName}, reminder for your balance of PHP ${amt.toStringAsFixed(2)} at $storeName. Thank you!';
                                   final Uri uri = Uri(
                                     scheme: 'sms',
                                     path: entry.customerPhone!,

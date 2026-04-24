@@ -50,11 +50,35 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
     final TextEditingController mobileCtrl = TextEditingController();
     String method = cart.paymentMethod;
     String? cashError;
-    String? paymentQrPath;
-
-    // Load uploaded QR path upfront
+    // Load all configured QR paths
     final SharedPreferences prefs = await SharedPreferences.getInstance();
-    paymentQrPath = prefs.getString('paymentQrPath');
+    final List<Map<String, String?>> qrEntries = <Map<String, String?>>[
+      <String, String?>{
+        'key': 'qr_gcash',
+        'label': prefs.getString('qr_gcash_label') ?? 'GCash',
+        'path': prefs.getString('qr_gcash_path') ?? prefs.getString('paymentQrPath'),
+      },
+      <String, String?>{
+        'key': 'qr_maya',
+        'label': prefs.getString('qr_maya_label') ?? 'Maya',
+        'path': prefs.getString('qr_maya_path'),
+      },
+      <String, String?>{
+        'key': 'qr_maribank',
+        'label': prefs.getString('qr_maribank_label') ?? 'MariBank',
+        'path': prefs.getString('qr_maribank_path'),
+      },
+      <String, String?>{
+        'key': 'qr_other',
+        'label': prefs.getString('qr_other_label') ?? 'Other',
+        'path': prefs.getString('qr_other_path'),
+      },
+    ].where((Map<String, String?> e) {
+      final String? p = e['path'];
+      return p != null && File(p).existsSync();
+    }).toList();
+    String? selectedQrKey =
+        qrEntries.isNotEmpty ? qrEntries.first['key'] : null;
 
     if (!mounted) return;
 
@@ -142,57 +166,76 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                     // E-Wallet QR display
                     if (method == 'ewallet') ...<Widget>[
                       const SizedBox(height: 8),
-                      if (paymentQrPath != null &&
-                          File(paymentQrPath).existsSync()) ...<Widget>[
-                        Center(
-                          child: Column(children: <Widget>[
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: Image.file(
-                                File(paymentQrPath),
-                                height: 220,
-                                fit: BoxFit.contain,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Customer scans & enters ₱${total.toStringAsFixed(2)}',
-                              style: TextStyle(
-                                  color: c.textSecondary,
-                                  fontSize: 13),
-                            ),
-                          ]),
-                        ),
-                      ] else ...<Widget>[
+                      if (qrEntries.isEmpty) ...<Widget>[
                         Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
                             color: c.surfaceMuted,
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                                color: c.border,
-                                style: BorderStyle.solid),
+                            border: Border.all(color: c.border),
                           ),
                           child: Column(children: <Widget>[
                             Icon(Icons.qr_code_2,
                                 size: 48, color: c.textTertiary),
                             const SizedBox(height: 8),
-                            Text(
-                              'No payment QR set up.',
-                              style: TextStyle(color: c.textSecondary),
-                            ),
+                            Text('No payment QR set up.',
+                                style: TextStyle(color: c.textSecondary)),
                             const SizedBox(height: 4),
                             Text(
-                              'Go to Profile → Payment QR Code to upload your GCash / Maya QR.',
+                              'Go to Profile → Payment QR Codes to upload.',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                   color: c.textTertiary, fontSize: 12),
                             ),
                           ]),
                         ),
+                      ] else ...<Widget>[
+                        // QR selector chips
+                        if (qrEntries.length > 1)
+                          Wrap(
+                            spacing: 8,
+                            children: qrEntries.map((Map<String, String?> e) {
+                              final bool sel = selectedQrKey == e['key'];
+                              return ChoiceChip(
+                                label: Text(e['label'] ?? ''),
+                                selected: sel,
+                                onSelected: (_) =>
+                                    setS(() => selectedQrKey = e['key']),
+                              );
+                            }).toList(),
+                          ),
+                        const SizedBox(height: 8),
+                        // Display selected QR
+                        Builder(builder: (BuildContext _) {
+                          final Map<String, String?>? entry =
+                              qrEntries.cast<Map<String, String?>?>()
+                                  .firstWhere(
+                                    (Map<String, String?>? e) =>
+                                        e!['key'] == selectedQrKey,
+                                    orElse: () => qrEntries.first,
+                                  );
+                          final String? path = entry?['path'];
+                          if (path == null) return const SizedBox.shrink();
+                          return Center(
+                            child: Column(children: <Widget>[
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: Image.file(File(path),
+                                    height: 200, fit: BoxFit.contain),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Customer scans & enters ₱${total.toStringAsFixed(2)}',
+                                style: TextStyle(
+                                    color: c.textSecondary, fontSize: 13),
+                              ),
+                            ]),
+                          );
+                        }),
                       ],
                       const SizedBox(height: 8),
                     ],
+
 
                     const SizedBox(height: 12),
 
@@ -267,8 +310,6 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
     );
   }
 
-  // ─── Receipt Dialog ───────────────────────────────────────────────────────
-
   Future<void> _showReceiptDialog(Receipt? receipt) async {
     if (receipt == null || !mounted) return;
 
@@ -281,18 +322,22 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
       context: context,
       builder: (BuildContext ctx) {
         final AppColors c = appColors(ctx);
+        // NOTE: Do NOT use SingleChildScrollView here —
+        // QrImageView uses LayoutBuilder which crashes on intrinsic sizing.
         return AlertDialog(
           title: Row(children: <Widget>[
             Icon(Icons.check_circle_rounded, color: Colors.green.shade600),
             const SizedBox(width: 8),
-            const Text('Transaction Complete'),
+            const Expanded(child: Text('Transaction Complete')),
           ]),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                // QR of receipt data
-                Container(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              // Explicit size prevents LayoutBuilder intrinsic crash
+              SizedBox(
+                width: 170,
+                height: 170,
+                child: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: Colors.white,
@@ -301,54 +346,44 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                   child: QrImageView(
                     data: receipt.qrPayload,
                     version: QrVersions.auto,
-                    size: 160,
+                    size: 154,
                     backgroundColor: Colors.white,
                   ),
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  '₱${(data['total'] as num?)?.toStringAsFixed(2) ?? receipt.qrPayload}',
-                  style: TextStyle(
-                      color: c.primary,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 26),
-                ),
-                Text(
-                  receipt.storeName,
-                  style: TextStyle(color: c.textSecondary, fontSize: 13),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Receipt #${receipt.receiptId.substring(0, 8).toUpperCase()}',
-                  style: TextStyle(color: c.textTertiary, fontSize: 11),
-                ),
-                if (data['payment_method'] == 'cash' &&
-                    data['total'] != null) ...<Widget>[
-                  const SizedBox(height: 8),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: c.info.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: <Widget>[
-                        Icon(Icons.payments_outlined,
-                            color: c.info, size: 16),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Cash · Change: ₱${ref.read(cartProvider).changeDue.toStringAsFixed(2)}',
-                          style:
-                              TextStyle(color: c.info, fontSize: 13),
-                        ),
-                      ],
-                    ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '₱${(data['total'] as num?)?.toStringAsFixed(2) ?? '—'}',
+                style: TextStyle(
+                    color: c.primary,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 26),
+              ),
+              Text(
+                receipt.storeName,
+                style: TextStyle(color: c.textSecondary, fontSize: 13),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Receipt #${receipt.receiptId.substring(0, 8).toUpperCase()}',
+                style: TextStyle(color: c.textTertiary, fontSize: 11),
+              ),
+              if (data['payment_method'] == 'cash') ...<Widget>[
+                const SizedBox(height: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: c.info.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                ],
+                  child: Text(
+                    'Change: ₱${ref.read(cartProvider).changeDue.toStringAsFixed(2)}',
+                    style: TextStyle(color: c.info, fontSize: 13),
+                  ),
+                ),
               ],
-            ),
+            ],
           ),
           actions: <Widget>[
             ElevatedButton.icon(
@@ -363,6 +398,33 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
         );
       },
     );
+  }
+
+  // Scan barcode → find product by barcode → add to cart directly
+  Future<void> _scanAndAdd() async {
+    final String? barcode = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const BarcodeScannerView()),
+    );
+    if (barcode == null || barcode.isEmpty || !mounted) return;
+    final CartNotifier notifier = ref.read(cartProvider.notifier);
+    await notifier.search(barcode);
+    final List<Product> results = ref.read(cartProvider).searchResults;
+    if (results.isEmpty) {
+      _showMessage('No product found for barcode: $barcode');
+    } else {
+      final Product p = results.first;
+      if (p.stockQty <= 0) {
+        _showMessage('"${p.name}" is out of stock');
+      } else {
+        notifier.addProduct(p);
+        _showMessage('Added: ${p.name}');
+      }
+    }
+    notifier.search(''); // clear search results
+    setState(() {
+      _showSearch = false;
+      _searchCtrl.clear();
+    });
   }
 
   // ─── Build ────────────────────────────────────────────────────────────────
@@ -395,28 +457,6 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                         _showSearch ? Icons.close : Icons.search,
                         size: 18),
                     tooltip: 'Search products',
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton.filledTonal(
-                    onPressed: () async {
-                      final String? barcode =
-                          await Navigator.of(context).push<String>(
-                        MaterialPageRoute(
-                            builder: (_) => const BarcodeScannerView()),
-                      );
-                      if (barcode != null &&
-                          barcode.isNotEmpty &&
-                          mounted) {
-                        setState(() {
-                          _showSearch = true;
-                          _searchCtrl.text = barcode;
-                        });
-                        ref.read(cartProvider.notifier).search(barcode);
-                      }
-                    },
-                    icon:
-                        const Icon(Icons.qr_code_scanner, size: 18),
-                    tooltip: 'Scan Barcode',
                   ),
                 ]),
                 const SizedBox(height: 10),
@@ -472,26 +512,69 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                   const SizedBox(height: 12),
                 ],
 
-                // Cart items
-                if (cart.isEmpty)
-                  Center(
-                    child: Padding(
-                      padding:
-                          const EdgeInsets.symmetric(vertical: 40),
-                      child: Column(children: <Widget>[
-                        Icon(Icons.shopping_cart_outlined,
-                            size: 56, color: c.textTertiary),
-                        const SizedBox(height: 12),
-                        Text('Cart is empty',
-                            style:
-                                TextStyle(color: c.textSecondary)),
-                        const SizedBox(height: 6),
-                        Text('Tap 🔍 to search or scan a barcode',
-                            style: TextStyle(
-                                color: c.textTertiary, fontSize: 12)),
-                      ]),
-                    ),
+                // Cart items — empty state shows big SCAN button
+                if (cart.isEmpty && !_showSearch)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    child: Column(children: <Widget>[
+                      // Primary CTA: big scan button
+                      InkWell(
+                        onTap: _scanAndAdd,
+                        borderRadius: BorderRadius.circular(20),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 36),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: <Color>[
+                                c.primary,
+                                c.primary.withValues(alpha: 0.75),
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: <BoxShadow>[
+                              BoxShadow(
+                                color: c.primary.withValues(alpha: 0.35),
+                                blurRadius: 16,
+                                offset: const Offset(0, 6),
+                              ),
+                            ],
+                          ),
+                          child: Column(children: <Widget>[
+                            const Icon(Icons.qr_code_scanner,
+                                size: 64, color: Colors.white),
+                            const SizedBox(height: 12),
+                            const Text(
+                              'Tap to Scan Barcode',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 18,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Point camera at product barcode',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.8),
+                                fontSize: 13,
+                              ),
+                            ),
+                          ]),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'or use 🔍 Search above',
+                        style: TextStyle(
+                            color: c.textTertiary, fontSize: 12),
+                      ),
+                    ]),
                   )
+                else if (cart.isEmpty) // search open, nothing in cart
+                  const SizedBox(height: 8)
                 else
                   ...cart.items.map((CartItem item) {
                     return Card(

@@ -116,29 +116,37 @@ class InventoryNotifier extends AsyncNotifier<InventoryState> {
       updatedAt: DateTime.now(),
     );
     await _dao.insert(product);
-    await _generateSuggestionFor(product);
-    if (!_isOffline) {
-      await SyncNotifier.enqueue(
-        entityType: 'products',
-        entityId: product.productId,
-        operation: 'create',
-        payload: product.toMap(),
-      );
-    }
+    try {
+      await _generateSuggestionFor(product);
+    } catch (_) {}
+    try {
+      if (!_isOffline) {
+        await SyncNotifier.enqueue(
+          entityType: 'products',
+          entityId: product.productId,
+          operation: 'create',
+          payload: product.toMap(),
+        );
+      }
+    } catch (_) {}
     await refresh();
   }
 
   Future<void> updateProduct(Product product) async {
     await _dao.update(product);
-    await _generateSuggestionFor(product);
-    if (!_isOffline) {
-      await SyncNotifier.enqueue(
-        entityType: 'products',
-        entityId: product.productId,
-        operation: 'update',
-        payload: product.toMap(),
-      );
-    }
+    try {
+      await _generateSuggestionFor(product);
+    } catch (_) {}
+    try {
+      if (!_isOffline) {
+        await SyncNotifier.enqueue(
+          entityType: 'products',
+          entityId: product.productId,
+          operation: 'update',
+          payload: product.toMap(),
+        );
+      }
+    } catch (_) {}
     await refresh();
   }
 
@@ -165,6 +173,7 @@ class InventoryNotifier extends AsyncNotifier<InventoryState> {
       'suggestion_id': _uuid.v4(),
       'product_id': product.productId,
       'suggested_price': suggested,
+      'benchmark_source': 'cost_markup',
       'fetched_at': DateTime.now().toIso8601String(),
       'accepted': 0,
     });

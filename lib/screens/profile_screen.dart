@@ -20,19 +20,38 @@ class ProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
-  String? _paymentQrPath;
+  // key → SharedPreferences key, label → display name
+  static const List<Map<String, String>> _qrSlots = <Map<String, String>>[
+    <String, String>{'key': 'qr_gcash', 'label': 'GCash'},
+    <String, String>{'key': 'qr_maya', 'label': 'Maya'},
+    <String, String>{'key': 'qr_maribank', 'label': 'MariBank'},
+    <String, String>{'key': 'qr_other', 'label': 'Other'},
+  ];
+
+  final Map<String, String?> _qrPaths = <String, String?>{};
+  final Map<String, String> _otherLabels = <String, String>{};
 
   @override
   void initState() {
     super.initState();
-    _loadQrPath();
+    _loadQrPaths();
   }
 
-  Future<void> _loadQrPath() async {
+  Future<void> _loadQrPaths() async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
-    if (mounted) {
-      setState(() => _paymentQrPath = prefs.getString('paymentQrPath'));
-    }
+    if (!mounted) return;
+    setState(() {
+      for (final Map<String, String> slot in _qrSlots) {
+        _qrPaths[slot['key']!] = prefs.getString('${slot['key']!}_path');
+        _otherLabels[slot['key']!] =
+            prefs.getString('${slot['key']!}_label') ?? slot['label']!;
+      }
+      // Migrate legacy single QR
+      final String? legacy = prefs.getString('paymentQrPath');
+      if (legacy != null && _qrPaths['qr_gcash'] == null) {
+        _qrPaths['qr_gcash'] = legacy;
+      }
+    });
   }
 
   void _showMessage(String msg) {
@@ -41,22 +60,55 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  Future<void> _pickPaymentQr() async {
+  Future<void> _pickQr(String key) async {
     final ImagePicker picker = ImagePicker();
     final XFile? file =
         await picker.pickImage(source: ImageSource.gallery, imageQuality: 90);
     if (file == null) return;
     final SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setString('paymentQrPath', file.path);
-    if (mounted) setState(() => _paymentQrPath = file.path);
-    _showMessage('Payment QR updated');
+    await prefs.setString('${key}_path', file.path);
+    if (mounted) setState(() => _qrPaths[key] = file.path);
+    _showMessage('QR updated');
   }
 
-  Future<void> _removePaymentQr() async {
+  Future<void> _removeQr(String key) async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.remove('paymentQrPath');
-    if (mounted) setState(() => _paymentQrPath = null);
-    _showMessage('Payment QR removed');
+    await prefs.remove('${key}_path');
+    if (mounted) setState(() => _qrPaths[key] = null);
+    _showMessage('QR removed');
+  }
+
+  Future<void> _setOtherLabel(String key) async {
+    final TextEditingController ctrl =
+        TextEditingController(text: _otherLabels[key] ?? 'Other');
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext ctx) => AlertDialog(
+        title: const Text('Payment Method Name'),
+        content: TextField(
+          controller: ctrl,
+          decoration:
+              const InputDecoration(hintText: 'e.g. BDO, BPI, Instapay'),
+        ),
+        actions: <Widget>[
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final SharedPreferences prefs =
+                  await SharedPreferences.getInstance();
+              await prefs.setString('${key}_label', ctrl.text.trim());
+              if (mounted) {
+                setState(() => _otherLabels[key] = ctrl.text.trim());
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _changeStoreName() async {
@@ -73,8 +125,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         ),
         actions: <Widget>[
           TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel')),
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(ctx);
@@ -112,8 +163,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     controller: oldCtrl,
                     obscureText: true,
                     keyboardType: TextInputType.number,
-                    decoration:
-                        const InputDecoration(labelText: 'Current PIN'),
+                    decoration: const InputDecoration(labelText: 'Current PIN'),
                   ),
                   const SizedBox(height: 10),
                   TextField(
@@ -160,7 +210,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       return;
                     }
                     Navigator.pop(ctx);
-                    await ref.read(authProvider.notifier).changePin(newCtrl.text);
+                    await ref
+                        .read(authProvider.notifier)
+                        .changePin(newCtrl.text);
                     _showMessage('PIN changed successfully');
                   },
                   style: ElevatedButton.styleFrom(
@@ -203,8 +255,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   /// Sign Out = full reset. Different warning for offline vs Google-linked.
   Future<void> _signOut() async {
-    final bool isOffline =
-        ref.read(authProvider).value?.isOfflineMode ?? false;
+    final bool isOffline = ref.read(authProvider).value?.isOfflineMode ?? false;
     final bool? confirmed = await showDialog<bool>(
       context: context,
       builder: (BuildContext ctx) {
@@ -279,8 +330,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       ),
                       Text(
                         '${auth.user?.role.toUpperCase() ?? 'OWNER'}${auth.isOfflineMode ? ' · Offline' : ''}',
-                        style:
-                            TextStyle(color: c.textSecondary, fontSize: 12),
+                        style: TextStyle(color: c.textSecondary, fontSize: 12),
                       ),
                     ],
                   ),
@@ -331,16 +381,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text('${sync.pendingCount} pending',
-                            style:
-                                TextStyle(color: c.warning, fontSize: 11)),
+                            style: TextStyle(color: c.warning, fontSize: 11)),
                       ),
                   ]),
                   if (sync.lastSyncedAt != null) ...<Widget>[
                     const SizedBox(height: 4),
                     Text(
                       'Last sync: ${DateFormat('MMM d, h:mm a').format(sync.lastSyncedAt!)}',
-                      style:
-                          TextStyle(color: c.textSecondary, fontSize: 12),
+                      style: TextStyle(color: c.textSecondary, fontSize: 12),
                     ),
                   ],
                   if (sync.lastError != null) ...<Widget>[
@@ -359,11 +407,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           ? const SizedBox(
                               width: 16,
                               height: 16,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2))
+                              child: CircularProgressIndicator(strokeWidth: 2))
                           : const Icon(Icons.sync),
-                      label: Text(
-                          sync.isSyncing ? 'Syncing...' : 'Sync Now'),
+                      label: Text(sync.isSyncing ? 'Syncing...' : 'Sync Now'),
                     ),
                   ),
                 ],
@@ -395,67 +441,89 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             const SizedBox(height: 16),
           ],
 
-          // ── Payment QR ─────────────────────────────────────────────────
+          // ── Payment QRs ─────────────────────────────────────────────────
           Card(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                ListTile(
-                  leading: const Icon(Icons.qr_code_2),
-                  title: const Text('Payment QR Code',
+                const ListTile(
+                  leading: Icon(Icons.qr_code_2),
+                  title: Text('Payment QR Codes',
                       style: TextStyle(fontWeight: FontWeight.w600)),
-                  subtitle: const Text(
-                      'GCash / Maya / InstaPay QR shown at checkout',
+                  subtitle: Text(
+                      'Customer scans these at checkout. Add GCash, Maya, MariBank, or any bank QR.',
                       style: TextStyle(fontSize: 12)),
                 ),
-                if (_paymentQrPath != null &&
-                    File(_paymentQrPath!).existsSync()) ...<Widget>[
-                  Center(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Image.file(File(_paymentQrPath!),
-                            height: 180, fit: BoxFit.contain),
+                const Divider(height: 1),
+                ...List<Widget>.generate(_qrSlots.length, (int i) {
+                  final String key = _qrSlots[i]['key']!;
+                  final String defaultLabel = _qrSlots[i]['label']!;
+                  final String label = _otherLabels[key] ?? defaultLabel;
+                  final String? path = _qrPaths[key];
+                  final bool hasQr = path != null && File(path).existsSync();
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      ListTile(
+                        dense: true,
+                        leading: Icon(
+                          hasQr
+                              ? Icons.check_circle_outline
+                              : Icons.radio_button_unchecked,
+                          color: hasQr ? Colors.green : c.textTertiary,
+                          size: 20,
+                        ),
+                        title: Text(label,
+                            style: const TextStyle(fontWeight: FontWeight.w600)),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            if (key == 'qr_other')
+                              IconButton(
+                                onPressed: () => _setOtherLabel(key),
+                                icon: const Icon(Icons.edit_outlined, size: 18),
+                                tooltip: 'Rename',
+                              ),
+                            IconButton(
+                              onPressed: () => _pickQr(key),
+                              icon: Icon(
+                                hasQr
+                                    ? Icons.swap_horiz
+                                    : Icons.add_photo_alternate_outlined,
+                                size: 18,
+                              ),
+                              tooltip: hasQr ? 'Change QR' : 'Upload QR',
+                            ),
+                            if (hasQr)
+                              IconButton(
+                                onPressed: () => _removeQr(key),
+                                icon: Icon(Icons.delete_outline,
+                                    color: c.error, size: 18),
+                                tooltip: 'Remove',
+                              ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Row(
-                      children: <Widget>[
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: _pickPaymentQr,
-                            icon: const Icon(Icons.upload_outlined, size: 16),
-                            label: const Text('Change QR'),
+                      if (hasQr) ...<Widget>[
+                        Center(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.file(File(path),
+                                  height: 140, fit: BoxFit.contain),
+                            ),
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          onPressed: _removePaymentQr,
-                          icon: Icon(Icons.delete_outline, color: c.error),
-                          tooltip: 'Remove QR',
-                        ),
                       ],
-                    ),
-                  ),
-                ] else ...<Widget>[
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                    child: OutlinedButton.icon(
-                      onPressed: _pickPaymentQr,
-                      icon: const Icon(Icons.add_photo_alternate_outlined),
-                      label: const Text('Upload QR from Gallery'),
-                      style: OutlinedButton.styleFrom(
-                          minimumSize: const Size(double.infinity, 44)),
-                    ),
-                  ),
-                ],
+                      if (i < _qrSlots.length - 1) const Divider(height: 1),
+                    ],
+                  );
+                }),
               ],
             ),
           ),
+
           const SizedBox(height: 8),
 
           // ── Settings tiles ─────────────────────────────────────────────
@@ -516,8 +584,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 // Logout — session only
                 ListTile(
                   leading: Icon(Icons.logout, color: c.error),
-                  title: Text('Logout',
-                      style: TextStyle(color: c.error)),
+                  title: Text('Logout', style: TextStyle(color: c.error)),
                   subtitle: const Text('Returns to PIN screen',
                       style: TextStyle(fontSize: 12)),
                   onTap: _logout,
@@ -525,8 +592,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 const Divider(height: 1),
                 // Sign Out — full reset
                 ListTile(
-                  leading:
-                      Icon(Icons.exit_to_app, color: c.error),
+                  leading: Icon(Icons.exit_to_app, color: c.error),
                   title: Text('Sign Out',
                       style: TextStyle(
                           color: c.error, fontWeight: FontWeight.w700)),

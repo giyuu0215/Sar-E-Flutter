@@ -10,7 +10,7 @@ class AppDatabase {
   AppDatabase._();
 
   static const String _dbName = 'sare.db';
-  static const int _version = 2;
+  static const int _version = 3;
 
   static Database? _db;
 
@@ -201,7 +201,7 @@ class AppDatabase {
         suggestion_id    TEXT PRIMARY KEY,
         product_id       TEXT NOT NULL REFERENCES products(product_id),
         suggested_price  REAL NOT NULL,
-        benchmark_source TEXT NOT NULL,
+        benchmark_source TEXT NOT NULL DEFAULT 'cost_markup',
         fetched_at       TEXT NOT NULL,
         accepted         INTEGER NOT NULL DEFAULT 0,
         accepted_at      TEXT
@@ -250,12 +250,54 @@ class AppDatabase {
     ''');
     await db.execute(
         'CREATE INDEX idx_outbound_status ON outbound_messages(status, created_at)');
+
+    await _seedDefaultCategories(db);
   }
 
   static Future<void> _onUpgrade(
       Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       await db.execute('ALTER TABLE products ADD COLUMN barcode TEXT UNIQUE');
+    }
+    if (oldVersion < 3) {
+      // Create sync_queue for installs that upgraded from v1 before this table existed
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS sync_queue (
+          queue_id    TEXT PRIMARY KEY,
+          entity_type TEXT NOT NULL,
+          entity_id   TEXT NOT NULL,
+          operation   TEXT NOT NULL,
+          payload     TEXT NOT NULL,
+          created_at  TEXT NOT NULL,
+          retry_count INTEGER NOT NULL DEFAULT 0,
+          status      TEXT NOT NULL DEFAULT 'pending'
+        )
+      ''');
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_sync_status ON sync_queue(status, created_at)');
+      // Add default column if missing
+      try {
+        await db.execute(
+            "ALTER TABLE price_suggestions ADD COLUMN benchmark_source TEXT NOT NULL DEFAULT 'cost_markup'");
+      } catch (_) {} // Already exists on fresh installs
+      await _seedDefaultCategories(db);
+    }
+  }
+
+  static Future<void> _seedDefaultCategories(Database db) async {
+    final List<String> names = <String>[
+      'Beverages', 'Snacks', 'Canned Goods', 'Instant Noodles',
+      'Condiments', 'Dairy & Eggs', 'Frozen Foods', 'Personal Care',
+      'Household', 'Tobacco', 'Alcohol', 'Other',
+    ];
+    final String now = DateTime.now().toIso8601String();
+    for (final String name in names) {
+      try {
+        await db.execute(
+          "INSERT OR IGNORE INTO categories (category_id, name, created_at) VALUES (lower(hex(randomblob(16))), ?, ?)",
+          <Object>[name, now],
+        );
+      } catch (_) {}
     }
   }
 
