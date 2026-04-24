@@ -83,7 +83,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
         return false;
       }
 
-      final GoogleSignInAuthentication gAuth = await gUser.authentication;
+      final GoogleSignInAuthentication gAuth = gUser.authentication;
       final OAuthCredential credential = GoogleAuthProvider.credential(
         accessToken: gAuth.accessToken,
         idToken: gAuth.idToken,
