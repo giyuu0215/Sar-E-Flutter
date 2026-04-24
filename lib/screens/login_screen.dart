@@ -27,9 +27,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Future<void> _submit() async {
     if (_pinCtrl.text.trim().length < 4) return;
-    final bool ok = await ref
-        .read(authProvider.notifier)
-        .login(_pinCtrl.text.trim());
+    final bool ok =
+        await ref.read(authProvider.notifier).login(_pinCtrl.text.trim());
     if (!ok && mounted) {
       _pinCtrl.clear();
     }
@@ -39,7 +38,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget build(BuildContext context) {
     final AppColors c = appColors(context);
     final bool dark = Theme.of(context).brightness == Brightness.dark;
-    final AuthState auth = ref.watch(authProvider).value ?? const AuthState();
+    final AuthState auth =
+        ref.watch(authProvider).value ?? const AuthState();
+
+    // Grab the store name from SQLite-cached user (may be null on first load).
+    final String storeName = auth.user?.storeName ?? 'your store';
 
     return Scaffold(
       body: LiquidBackground(
@@ -49,7 +52,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             child: Column(
               children: <Widget>[
                 const SizedBox(height: 60),
-                // Logo
+                // ── Logo ────────────────────────────────────────────────
                 Container(
                   width: 90,
                   height: 90,
@@ -83,7 +86,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       color: c.textSecondary, fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(height: 40),
-                // Login card
+                // ── Login card ──────────────────────────────────────────
                 ClipRRect(
                   borderRadius: BorderRadius.circular(24),
                   child: BackdropFilter(
@@ -98,7 +101,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       child: Column(
                         children: <Widget>[
                           Text(
-                            'Enter PIN',
+                            'Welcome back!',
                             style: Theme.of(context)
                                 .textTheme
                                 .titleMedium
@@ -106,12 +109,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Enter your store PIN to continue',
+                            storeName,
+                            style: TextStyle(
+                              color: c.primary,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 15,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Enter your PIN to continue',
                             style: TextStyle(
                                 color: c.textSecondary, fontSize: 13),
                           ),
                           const SizedBox(height: 20),
-                          // PIN input
+                          // ── PIN input ──────────────────────────────────
                           TextField(
                             controller: _pinCtrl,
                             obscureText: _obscure,
@@ -168,17 +180,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           ],
                           const SizedBox(height: 20),
                           Row(
-                            children: [
+                            children: <Widget>[
                               Expanded(
                                 child: ElevatedButton(
-                                  onPressed: auth.isLoading ? null : _submit,
+                                  onPressed:
+                                      auth.isLoading ? null : _submit,
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: c.primary,
                                     foregroundColor: dark
                                         ? const Color(0xFF0D1117)
                                         : Colors.white,
-                                    padding:
-                                        const EdgeInsets.symmetric(vertical: 14),
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 14),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(14),
                                     ),
@@ -189,13 +202,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                           height: 20,
                                           child: CircularProgressIndicator(
                                               strokeWidth: 2,
-                                              color: Colors.white))
+                                              color: Colors.white),
+                                        )
                                       : const Text('Login',
                                           style: TextStyle(
                                               fontWeight: FontWeight.w700)),
                                 ),
                               ),
                               const SizedBox(width: 12),
+                              // Biometric button
                               ElevatedButton(
                                 onPressed: auth.isLoading
                                     ? null
@@ -207,15 +222,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: c.surface,
                                   foregroundColor: c.primary,
-                                  padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 14, horizontal: 16),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(14),
                                     side: BorderSide(color: c.primary),
                                   ),
                                 ),
-                                child: const Icon(Icons.fingerprint),
+                                child:
+                                    const Icon(Icons.fingerprint, size: 26),
                               ),
                             ],
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Forgot PIN? Contact your store owner.',
+                            style: TextStyle(
+                                color: c.textTertiary, fontSize: 12),
                           ),
                         ],
                       ),
