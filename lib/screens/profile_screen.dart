@@ -282,6 +282,46 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   onTap: _changePin,
                 ),
                 const Divider(height: 1),
+                if (auth.user?.role == 'owner') ...<Widget>[
+                  ListTile(
+                    leading: const Icon(Icons.person_add_alt_1_outlined),
+                    title: const Text('Add Cashier'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () async {
+                      final TextEditingController pinCtrl = TextEditingController();
+                      await showDialog<void>(
+                        context: context,
+                        builder: (BuildContext ctx) => AlertDialog(
+                          title: const Text('New Cashier PIN'),
+                          content: TextField(
+                            controller: pinCtrl,
+                            obscureText: true,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(labelText: '4-digit PIN'),
+                          ),
+                          actions: <Widget>[
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx),
+                              child: const Text('Cancel'),
+                            ),
+                            ElevatedButton(
+                              onPressed: () async {
+                                if (pinCtrl.text.length < 4) return;
+                                Navigator.pop(ctx);
+                                await ref.read(authProvider.notifier).addCashier(pinCtrl.text);
+                                _showMessage('Cashier added successfully!');
+                              },
+                              style: ElevatedButton.styleFrom(
+                                  backgroundColor: c.primary, foregroundColor: Colors.white),
+                              child: const Text('Add'),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                  const Divider(height: 1),
+                ],
                 ListTile(
                   leading: Icon(Icons.logout, color: c.error),
                   title: Text('Logout',

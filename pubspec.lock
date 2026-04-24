@@ -161,6 +161,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.7.12"
+  dev_build:
+    dependency: transitive
+    description:
+      name: dev_build
+      sha256: fab11ef55932f5805c405a7597ae5c7e0908e33c0120bd7a9dfda44bdf86c35f
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.1.5+3"
   dynamic_color:
     dependency: "direct main"
     description:
@@ -408,6 +416,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.17.0"
+  mobile_scanner:
+    dependency: "direct main"
+    description:
+      name: mobile_scanner
+      sha256: c92c26bf2231695b6d3477c8dcf435f51e28f87b1745966b1fe4c47a286171ce
+      url: "https://pub.dev"
+    source: hosted
+    version: "7.2.0"
   native_toolchain_c:
     dependency: transitive
     description:
@@ -544,6 +560,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.8"
+  pool:
+    dependency: transitive
+    description:
+      name: pool
+      sha256: "978783255c543aa3586a1b3c21f6e9d720eb315376a915872c61ef8b5c20177d"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.5.2"
   posix:
     dependency: transitive
     description:
@@ -560,6 +584,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "5.14.3"
+  process_run:
+    dependency: transitive
+    description:
+      name: process_run
+      sha256: "8bdbe7ec335391ad32e5119cdcecaa7f679bc924fc5a5d7e8bc7a8fbd22592a1"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.3.2"
   pub_semver:
     dependency: transitive
     description:
@@ -693,6 +725,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.5.6+1"
+  sqflite_common_ffi:
+    dependency: "direct main"
+    description:
+      name: sqflite_common_ffi
+      sha256: cd0c7f7de39a08f2d54ef144d9058c46eca8461879aaa648025643455c1e5a20
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.4.0+3"
+  sqflite_common_ffi_web:
+    dependency: "direct main"
+    description:
+      name: sqflite_common_ffi_web
+      sha256: "79338d0b69521d70cea10f841209ac87ce617921aaf7d33e7380682c83da1f06"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.1.1"
   sqflite_darwin:
     dependency: transitive
     description:
@@ -709,6 +757,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.4.0"
+  sqlite3:
+    dependency: transitive
+    description:
+      name: sqlite3
+      sha256: "56da3e13ed7d28a66f930aa2b2b29db6736a233f08283326e96321dd812030f5"
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.3.1"
   stack_trace:
     dependency: transitive
     description:
@@ -773,6 +829,70 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.4.0"
+  url_launcher:
+    dependency: "direct main"
+    description:
+      name: url_launcher
+      sha256: f6a7e5c4835bb4e3026a04793a4199ca2d14c739ec378fdfe23fc8075d0439f8
+      url: "https://pub.dev"
+    source: hosted
+    version: "6.3.2"
+  url_launcher_android:
+    dependency: transitive
+    description:
+      name: url_launcher_android
+      sha256: "3bb000251e55d4a209aa0e2e563309dc9bb2befea2295fd0cec1f51760aac572"
+      url: "https://pub.dev"
+    source: hosted
+    version: "6.3.29"
+  url_launcher_ios:
+    dependency: transitive
+    description:
+      name: url_launcher_ios
+      sha256: "580fe5dfb51671ae38191d316e027f6b76272b026370708c2d898799750a02b0"
+      url: "https://pub.dev"
+    source: hosted
+    version: "6.4.1"
+  url_launcher_linux:
+    dependency: transitive
+    description:
+      name: url_launcher_linux
+      sha256: d5e14138b3bc193a0f63c10a53c94b91d399df0512b1f29b94a043db7482384a
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.2.2"
+  url_launcher_macos:
+    dependency: transitive
+    description:
+      name: url_launcher_macos
+      sha256: "368adf46f71ad3c21b8f06614adb38346f193f3a59ba8fe9a2fd74133070ba18"
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.2.5"
+  url_launcher_platform_interface:
+    dependency: transitive
+    description:
+      name: url_launcher_platform_interface
+      sha256: "552f8a1e663569be95a8190206a38187b531910283c3e982193e4f2733f01029"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.3.2"
+  url_launcher_web:
+    dependency: transitive
+    description:
+      name: url_launcher_web
+      sha256: d0412fcf4c6b31ecfdb7762359b7206ffba3bbffd396c6d9f9c4616ece476c1f
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.4.2"
+  url_launcher_windows:
+    dependency: transitive
+    description:
+      name: url_launcher_windows
+      sha256: "712c70ab1b99744ff066053cbe3e80c73332b38d46e5e945c98689b2e66fc15f"
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.1.5"
   uuid:
     dependency: "direct main"
     description:

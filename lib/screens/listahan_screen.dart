@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../application/listahan_provider.dart';
 import '../domain/entities/credit_entry.dart';
@@ -183,11 +184,15 @@ class _ListahanContentState extends ConsumerState<_ListahanContent> {
                 ElevatedButton(
                   onPressed: () async {
                     if (selectedCustomer == null) {
+                      _showMessage('Please select a customer.');
                       return;
                     }
                     final double amount =
                         double.tryParse(amountCtrl.text) ?? 0;
-                    if (amount <= 0) return;
+                    if (amount <= 0) {
+                      _showMessage('Please enter a valid amount.');
+                      return;
+                    }
                     final List<String> items = itemsCtrl.text
                         .split(',')
                         .map((String s) => s.trim())
@@ -316,7 +321,10 @@ class _ListahanContentState extends ConsumerState<_ListahanContent> {
               onPressed: () async {
                 final double amount =
                     double.tryParse(amountCtrl.text) ?? 0;
-                if (amount <= 0) return;
+                if (amount <= 0) {
+                  _showMessage('Please enter a valid amount.');
+                  return;
+                }
                 Navigator.pop(ctx);
                 await ref
                     .read(listahanProvider.notifier)
@@ -567,21 +575,49 @@ class _ListahanContentState extends ConsumerState<_ListahanContent> {
                       ]),
                       if (!settled) ...<Widget>[
                         const SizedBox(height: 8),
-                        SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton(
-                            onPressed: () =>
-                                _showRepayDialog(entry),
-                            style: OutlinedButton.styleFrom(
-                              side: BorderSide(color: c.primary),
-                              shape: RoundedRectangleBorder(
-                                  borderRadius:
-                                      BorderRadius.circular(10)),
+                        Row(
+                          children: <Widget>[
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () =>
+                                    _showRepayDialog(entry),
+                                style: OutlinedButton.styleFrom(
+                                  side: BorderSide(color: c.primary),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius:
+                                          BorderRadius.circular(10)),
+                                ),
+                                child: Text('Record Payment',
+                                    style:
+                                        TextStyle(color: c.primary)),
+                              ),
                             ),
-                            child: Text('Record Payment',
-                                style:
-                                    TextStyle(color: c.primary)),
-                          ),
+                            if (entry.customerPhone != null) ...<Widget>[
+                              const SizedBox(width: 8),
+                              IconButton.filledTonal(
+                                onPressed: () async {
+                                  final double amt = entry.remaining;
+                                  final String msg = 'Hi ${entry.customerName}, reminder for your balance of PHP ${amt.toStringAsFixed(2)} at Sar-E store. Thank you!';
+                                  final Uri uri = Uri(
+                                    scheme: 'sms',
+                                    path: entry.customerPhone!,
+                                    queryParameters: <String, String>{'body': msg},
+                                  );
+                                  if (await canLaunchUrl(uri)) {
+                                    await launchUrl(uri);
+                                  } else {
+                                    _showMessage('Could not launch SMS app');
+                                  }
+                                },
+                                icon: Icon(Icons.sms_outlined, color: c.primary),
+                                style: IconButton.styleFrom(
+                                  backgroundColor: c.primary.withValues(alpha: 0.1),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10)),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ],
                     ],

@@ -79,39 +79,24 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
 
   /// Login with PIN.
   Future<bool> login(String pin) async {
-    state = AsyncData<AuthState>(state.value!.copyWith(isLoading: true));
+    state = const AsyncData<AuthState>(AuthState(isLoading: true));
 
-    final UserCredential? user = await _dao.getOwner();
+    final String hashed = hashPin(pin);
+    final UserCredential? user = await _dao.getUserByPinHash(hashed);
+    
     if (user == null) {
-      state = AsyncData<AuthState>(
-          AuthState(isFirstRun: true, errorMessage: 'No account found'));
+      state = const AsyncData<AuthState>(
+          AuthState(isFirstRun: false, errorMessage: 'Invalid PIN.'));
       return false;
     }
 
     if (user.isLocked) {
       final int remaining =
           user.lockedUntil!.difference(DateTime.now()).inMinutes;
-      state = AsyncData<AuthState>(state.value!.copyWith(
+      state = AsyncData<AuthState>(AuthState(
         isLoading: false,
         errorMessage: 'Account locked. Try again in $remaining min.',
       ));
-      return false;
-    }
-
-    if (hashPin(pin) != user.pinHash) {
-      final int newAttempts = user.failedAttempts + 1;
-      final bool shouldLock = newAttempts >= _maxAttempts;
-      final UserCredential updated = user.copyWith(
-        failedAttempts: newAttempts,
-        lockedUntil:
-            shouldLock ? DateTime.now().add(_lockDuration) : null,
-      );
-      await _dao.update(updated);
-      final String msg = shouldLock
-          ? 'Too many wrong PINs. Locked for ${_lockDuration.inMinutes} min.'
-          : 'Wrong PIN. ${_maxAttempts - newAttempts} attempts left.';
-      state = AsyncData<AuthState>(
-          state.value!.copyWith(isLoading: false, errorMessage: msg));
       return false;
     }
 
@@ -145,6 +130,19 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     final UserCredential updated = user.copyWith(pinHash: hashPin(newPin));
     await _dao.update(updated);
     state = AsyncData<AuthState>(state.value!.copyWith(user: updated));
+  }
+
+  Future<void> addCashier(String pin) async {
+    final UserCredential? user = state.value?.user;
+    if (user == null || user.role != 'owner') return;
+    
+    final UserCredential cashier = UserCredential(
+      userId: _uuid.v4(),
+      pinHash: hashPin(pin),
+      role: 'cashier',
+      storeName: user.storeName,
+    );
+    await _dao.insert(cashier);
   }
 }
 

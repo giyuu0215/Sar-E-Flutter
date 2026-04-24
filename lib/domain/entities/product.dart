@@ -3,6 +3,7 @@ class Product {
   const Product({
     required this.productId,
     this.categoryId,
+    this.barcode,
     required this.name,
     required this.unitPrice,
     required this.costPrice,
@@ -17,6 +18,7 @@ class Product {
 
   final String productId;
   final String? categoryId;
+  final String? barcode;
   final String name;
   final double unitPrice;
   final double costPrice;
@@ -35,6 +37,7 @@ class Product {
 
   Product copyWith({
     String? categoryId,
+    String? barcode,
     String? name,
     double? unitPrice,
     double? costPrice,
@@ -47,6 +50,7 @@ class Product {
       Product(
         productId: productId,
         categoryId: categoryId ?? this.categoryId,
+        barcode: barcode ?? this.barcode,
         name: name ?? this.name,
         unitPrice: unitPrice ?? this.unitPrice,
         costPrice: costPrice ?? this.costPrice,
@@ -62,6 +66,7 @@ class Product {
   Map<String, dynamic> toMap() => <String, dynamic>{
         'product_id': productId,
         'category_id': categoryId,
+        'barcode': barcode,
         'name': name,
         'unit_price': unitPrice,
         'cost_price': costPrice,
@@ -75,6 +80,7 @@ class Product {
   factory Product.fromMap(Map<String, dynamic> m) => Product(
         productId: m['product_id'] as String,
         categoryId: m['category_id'] as String?,
+        barcode: m['barcode'] as String?,
         name: m['name'] as String,
         unitPrice: (m['unit_price'] as num).toDouble(),
         costPrice: (m['cost_price'] as num? ?? 0).toDouble(),

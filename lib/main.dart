@@ -1,4 +1,5 @@
 import 'package:dynamic_color/dynamic_color.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -8,8 +9,14 @@ import 'screens/main_shell.dart';
 import 'screens/setup_screen.dart';
 import 'theme/app_theme.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await Firebase.initializeApp();
+  } catch (e) {
+    debugPrint('Firebase initialization failed: $e\n'
+        'Run `flutterfire configure` to generate firebase_options.dart.');
+  }
   runApp(const ProviderScope(child: SarEApp()));
 }
 

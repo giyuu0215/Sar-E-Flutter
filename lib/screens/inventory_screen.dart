@@ -5,6 +5,7 @@ import '../application/inventory_provider.dart';
 import '../domain/entities/category.dart';
 import '../domain/entities/product.dart';
 import '../theme/app_theme.dart';
+import 'barcode_scanner_view.dart';
 
 class InventoryScreen extends ConsumerWidget {
   const InventoryScreen({super.key});
@@ -47,6 +48,7 @@ class _InventoryContentState extends ConsumerState<_InventoryContent> {
     final TextEditingController stockCtrl = TextEditingController();
     final TextEditingController thresholdCtrl =
         TextEditingController(text: '5');
+    final TextEditingController barcodeCtrl = TextEditingController();
     String? selectedCategoryId;
 
     await showDialog<void>(
@@ -64,6 +66,36 @@ class _InventoryContentState extends ConsumerState<_InventoryContent> {
                         controller: nameCtrl,
                         decoration:
                             const InputDecoration(labelText: 'Product Name *')),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: barcodeCtrl,
+                      decoration: InputDecoration(
+                        labelText: 'Barcode (optional)',
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.qr_code_scanner),
+                          onPressed: () async {
+                            final String? code = await Navigator.of(context).push<String>(
+                              MaterialPageRoute(
+                                builder: (_) => const BarcodeScannerView(),
+                              ),
+                            );
+                            if (code != null && code.isNotEmpty) {
+                              barcodeCtrl.text = code;
+                              // Mock "Predefined Catalog" lookup
+                              if (code == '4800016644611') { // Mock Lucky Me
+                                nameCtrl.text = 'Lucky Me Pancit Canton';
+                                priceCtrl.text = '20.00';
+                                costCtrl.text = '15.00';
+                              } else if (code == '4800361365319') {
+                                nameCtrl.text = 'Coca-Cola 1.5L';
+                                priceCtrl.text = '85.00';
+                                costCtrl.text = '70.00';
+                              }
+                            }
+                          },
+                        ),
+                      ),
+                    ),
                     const SizedBox(height: 10),
                     Row(children: <Widget>[
                       Expanded(
@@ -139,11 +171,13 @@ class _InventoryContentState extends ConsumerState<_InventoryContent> {
                     final int threshold =
                         int.tryParse(thresholdCtrl.text) ?? 5;
                     if (nameCtrl.text.trim().isEmpty || price <= 0) {
+                      _showMessage('Please enter a valid name and price.');
                       return;
                     }
                     Navigator.pop(ctx);
                     await ref.read(inventoryProvider.notifier).addProduct(
                           name: nameCtrl.text.trim(),
+                          barcode: barcodeCtrl.text.trim().isEmpty ? null : barcodeCtrl.text.trim(),
                           unitPrice: price,
                           costPrice: cost,
                           stockQty: stock,

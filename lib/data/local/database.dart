@@ -1,5 +1,8 @@
+import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 
 /// Central sqflite database initialiser.
 /// All 16 tables from the ER diagram are created here.
@@ -7,7 +10,7 @@ class AppDatabase {
   AppDatabase._();
 
   static const String _dbName = 'sare.db';
-  static const int _version = 1;
+  static const int _version = 2;
 
   static Database? _db;
 
@@ -17,13 +20,29 @@ class AppDatabase {
   }
 
   static Future<Database> _open() async {
-    final String dbPath = p.join(await getDatabasesPath(), _dbName);
-    return openDatabase(
-      dbPath,
-      version: _version,
-      onCreate: _onCreate,
-      onUpgrade: _onUpgrade,
-    );
+    if (kIsWeb) {
+      databaseFactory = databaseFactoryFfiWeb;
+      return openDatabase(
+        _dbName,
+        version: _version,
+        onCreate: _onCreate,
+        onUpgrade: _onUpgrade,
+      );
+    } else {
+      if (defaultTargetPlatform == TargetPlatform.windows ||
+          defaultTargetPlatform == TargetPlatform.linux ||
+          defaultTargetPlatform == TargetPlatform.macOS) {
+        sqfliteFfiInit();
+        databaseFactory = databaseFactoryFfi;
+      }
+      final String dbPath = p.join(await getDatabasesPath(), _dbName);
+      return openDatabase(
+        dbPath,
+        version: _version,
+        onCreate: _onCreate,
+        onUpgrade: _onUpgrade,
+      );
+    }
   }
 
   static Future<void> _onCreate(Database db, int version) async {
@@ -53,6 +72,7 @@ class AppDatabase {
       CREATE TABLE products (
         product_id  TEXT PRIMARY KEY,
         category_id TEXT REFERENCES categories(category_id),
+        barcode     TEXT UNIQUE,
         name        TEXT NOT NULL,
         unit_price  REAL NOT NULL,
         cost_price  REAL NOT NULL DEFAULT 0,
@@ -234,7 +254,9 @@ class AppDatabase {
 
   static Future<void> _onUpgrade(
       Database db, int oldVersion, int newVersion) async {
-    // Future migrations go here
+    if (oldVersion < 2) {
+      await db.execute('ALTER TABLE products ADD COLUMN barcode TEXT UNIQUE');
+    }
   }
 
   /// Close the database (useful in tests).

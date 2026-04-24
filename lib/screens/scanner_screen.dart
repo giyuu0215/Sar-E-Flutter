@@ -9,6 +9,7 @@ import '../application/cart_provider.dart';
 import '../domain/entities/product.dart';
 import '../domain/entities/transaction.dart';
 import '../theme/app_theme.dart';
+import 'barcode_scanner_view.dart';
 
 class ScannerScreen extends ConsumerStatefulWidget {
   const ScannerScreen({super.key});
@@ -252,6 +253,25 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                     _showSearch ? Icons.close : Icons.search,
                     size: 18),
                 tooltip: 'Search products',
+              ),
+              const SizedBox(width: 8),
+              IconButton.filledTonal(
+                onPressed: () async {
+                  final String? barcode = await Navigator.of(context).push<String>(
+                    MaterialPageRoute(
+                      builder: (_) => const BarcodeScannerView(),
+                    ),
+                  );
+                  if (barcode != null && barcode.isNotEmpty && mounted) {
+                    setState(() {
+                      _showSearch = true;
+                      _searchCtrl.text = barcode;
+                    });
+                    ref.read(cartProvider.notifier).search(barcode);
+                  }
+                },
+                icon: const Icon(Icons.qr_code_scanner, size: 18),
+                tooltip: 'Scan Barcode',
               ),
             ],
           ),

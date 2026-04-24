@@ -96,6 +96,7 @@ class InventoryNotifier extends AsyncNotifier<InventoryState> {
 
   Future<void> addProduct({
     required String name,
+    String? barcode,
     required double unitPrice,
     required double costPrice,
     required int stockQty,
@@ -105,6 +106,7 @@ class InventoryNotifier extends AsyncNotifier<InventoryState> {
     final Product product = Product(
       productId: _uuid.v4(),
       categoryId: categoryId,
+      barcode: barcode,
       name: name,
       unitPrice: unitPrice,
       costPrice: costPrice,
