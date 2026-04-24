@@ -117,11 +117,39 @@ class InventoryNotifier extends AsyncNotifier<InventoryState> {
       updatedAt: DateTime.now(),
     );
     await _dao.insert(product);
+    await _generateSuggestionFor(product);
     await refresh();
   }
 
   Future<void> updateProduct(Product product) async {
     await _dao.update(product);
+    await _generateSuggestionFor(product);
+    await refresh();
+  }
+
+  /// Generates a cost-based price suggestion (cost × 1.25) for a single product.
+  /// Only inserts if the suggestion differs from the current price by > 5%.
+  Future<void> _generateSuggestionFor(Product product) async {
+    if (product.costPrice <= 0) return;
+    final double suggested =
+        double.parse((product.costPrice * 1.25).toStringAsFixed(2));
+    final double diff = (suggested - product.unitPrice).abs();
+    if (diff / product.unitPrice < 0.05) return; // < 5% diff — skip
+    await _dao.insertPriceSuggestion(<String, dynamic>{
+      'suggestion_id': _uuid.v4(),
+      'product_id': product.productId,
+      'suggested_price': suggested,
+      'fetched_at': DateTime.now().toIso8601String(),
+      'accepted': 0,
+    });
+  }
+
+  /// Recalculates suggestions for ALL products. Call manually from UI if needed.
+  Future<void> recalculateAllSuggestions() async {
+    final List<Product> products = await _dao.getAllProducts();
+    for (final Product p in products) {
+      await _generateSuggestionFor(p);
+    }
     await refresh();
   }
 

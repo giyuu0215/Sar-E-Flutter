@@ -70,7 +70,8 @@ class _InventoryContentState extends ConsumerState<_InventoryContent> {
                     TextField(
                       controller: barcodeCtrl,
                       decoration: InputDecoration(
-                        labelText: 'Barcode (optional)',
+                        labelText: 'Barcode *',
+                        hintText: 'Scan or type barcode',
                         suffixIcon: IconButton(
                           icon: const Icon(Icons.qr_code_scanner),
                           onPressed: () async {
@@ -82,7 +83,7 @@ class _InventoryContentState extends ConsumerState<_InventoryContent> {
                             if (code != null && code.isNotEmpty) {
                               barcodeCtrl.text = code;
                               // Mock "Predefined Catalog" lookup
-                              if (code == '4800016644611') { // Mock Lucky Me
+                              if (code == '4800016644611') {
                                 nameCtrl.text = 'Lucky Me Pancit Canton';
                                 priceCtrl.text = '20.00';
                                 costCtrl.text = '15.00';
@@ -91,6 +92,7 @@ class _InventoryContentState extends ConsumerState<_InventoryContent> {
                                 priceCtrl.text = '85.00';
                                 costCtrl.text = '70.00';
                               }
+                              setS(() {});
                             }
                           },
                         ),
@@ -174,6 +176,10 @@ class _InventoryContentState extends ConsumerState<_InventoryContent> {
                       _showMessage('Please enter a valid name and price.');
                       return;
                     }
+                    if (barcodeCtrl.text.trim().isEmpty) {
+                      _showMessage('Barcode is required.');
+                      return;
+                    }
                     Navigator.pop(ctx);
                     await ref.read(inventoryProvider.notifier).addProduct(
                           name: nameCtrl.text.trim(),
@@ -200,6 +206,8 @@ class _InventoryContentState extends ConsumerState<_InventoryContent> {
   }
 
   Future<void> _openEditDialog(Product product) async {
+    final TextEditingController barcodeCtrl =
+        TextEditingController(text: product.barcode ?? '');
     final TextEditingController priceCtrl =
         TextEditingController(text: product.unitPrice.toString());
     final TextEditingController costCtrl =
@@ -209,6 +217,7 @@ class _InventoryContentState extends ConsumerState<_InventoryContent> {
     final TextEditingController thresholdCtrl =
         TextEditingController(text: product.threshold.toString());
     String? selectedCategoryId = product.categoryId;
+    String? barcodeError;
 
     await showDialog<void>(
       context: context,
@@ -221,6 +230,31 @@ class _InventoryContentState extends ConsumerState<_InventoryContent> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
+                    // Barcode field with scan button
+                    TextField(
+                      controller: barcodeCtrl,
+                      decoration: InputDecoration(
+                        labelText: 'Barcode *',
+                        errorText: barcodeError,
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.qr_code_scanner),
+                          onPressed: () async {
+                            final String? code =
+                                await Navigator.of(context).push<String>(
+                              MaterialPageRoute(
+                                  builder: (_) => const BarcodeScannerView()),
+                            );
+                            if (code != null && code.isNotEmpty) {
+                              setS(() {
+                                barcodeCtrl.text = code;
+                                barcodeError = null;
+                              });
+                            }
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
                     Row(children: <Widget>[
                       Expanded(
                         child: TextField(
@@ -283,9 +317,14 @@ class _InventoryContentState extends ConsumerState<_InventoryContent> {
                 ),
                 ElevatedButton(
                   onPressed: () async {
+                    if (barcodeCtrl.text.trim().isEmpty) {
+                      setS(() => barcodeError = 'Barcode is required');
+                      return;
+                    }
                     Navigator.pop(ctx);
                     await ref.read(inventoryProvider.notifier).updateProduct(
                           product.copyWith(
+                            barcode: barcodeCtrl.text.trim(),
                             unitPrice:
                                 double.tryParse(priceCtrl.text) ??
                                     product.unitPrice,
@@ -370,6 +409,16 @@ class _InventoryContentState extends ConsumerState<_InventoryContent> {
               Text('Inventory',
                   style: Theme.of(context).textTheme.titleLarge),
               const Spacer(),
+              IconButton(
+                onPressed: () async {
+                  await ref
+                      .read(inventoryProvider.notifier)
+                      .recalculateAllSuggestions();
+                  _showMessage('Price suggestions updated');
+                },
+                icon: const Icon(Icons.auto_fix_high_outlined),
+                tooltip: 'Recalculate Price Suggestions',
+              ),
               IconButton(
                 onPressed: _openAddCategoryDialog,
                 icon: const Icon(Icons.label_outline),

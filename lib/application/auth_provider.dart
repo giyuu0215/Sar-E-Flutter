@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:crypto/crypto.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb_auth;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -22,6 +23,21 @@ String hashPin(String pin) {
   return sha256.convert(bytes).toString();
 }
 
+/// Result returned by [AuthNotifier.linkStoreWithGoogle].
+class GoogleLinkResult {
+  const GoogleLinkResult({
+    required this.storeId,
+    this.existingStoreName,
+  });
+
+  final String storeId;
+
+  /// Non-null when the store already exists in Firestore (returning user / new device).
+  final String? existingStoreName;
+
+  bool get isExistingStore => existingStoreName != null;
+}
+
 /// Authentication state.
 class AuthState {
   const AuthState({
@@ -30,6 +46,7 @@ class AuthState {
     this.errorMessage,
     this.isLoading = false,
     this.storeId,
+    this.isOfflineMode = false,
   });
 
   final UserCredential? user;
@@ -37,6 +54,9 @@ class AuthState {
   final String? errorMessage;
   final bool isLoading;
   final String? storeId;
+
+  /// True if this store was set up without Google Sign-In (local UUID only).
+  final bool isOfflineMode;
 
   /// True only when BOTH a local user exists AND a storeId is linked.
   bool get isLoggedIn => user != null && storeId != null;
@@ -48,6 +68,7 @@ class AuthState {
     bool clearError = false,
     bool? isLoading,
     String? storeId,
+    bool? isOfflineMode,
     bool clearUser = false,
   }) =>
       AuthState(
@@ -56,6 +77,7 @@ class AuthState {
         errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
         isLoading: isLoading ?? this.isLoading,
         storeId: storeId ?? this.storeId,
+        isOfflineMode: isOfflineMode ?? this.isOfflineMode,
       );
 }
 
@@ -69,22 +91,28 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
   Future<AuthState> build() async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     final String? storeId = prefs.getString('storeId');
+    final bool isOfflineMode = prefs.getBool('isOfflineMode') ?? false;
     final bool hasOwner = await _dao.exists();
 
     // First run = no owner registered yet OR device never linked to a store.
     if (!hasOwner || storeId == null) {
-      return AuthState(isFirstRun: true, storeId: storeId);
+      return AuthState(
+          isFirstRun: true, storeId: storeId, isOfflineMode: isOfflineMode);
     }
 
-    return AuthState(isFirstRun: false, storeId: storeId);
+    return AuthState(
+        isFirstRun: false, storeId: storeId, isOfflineMode: isOfflineMode);
   }
 
   // ─── Google Sign-In ────────────────────────────────────────────────────────
 
   /// Authenticate with Google to link device to a store.
-  /// Returns the Firebase UID (storeId) on success, or null on failure.
-  Future<String?> linkStoreWithGoogle() async {
-    state = AsyncData<AuthState>(state.value!.copyWith(isLoading: true, clearError: true));
+  /// Returns [GoogleLinkResult] on success, or null on failure.
+  /// [GoogleLinkResult.existingStoreName] is non-null if a store profile
+  /// already exists in Firestore (returning owner on a new device).
+  Future<GoogleLinkResult?> linkStoreWithGoogle() async {
+    state = AsyncData<AuthState>(
+        state.value!.copyWith(isLoading: true, clearError: true));
     try {
       if (!_googleSignInInitialized) {
         await GoogleSignIn.instance.initialize(
@@ -92,7 +120,8 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
         );
         _googleSignInInitialized = true;
       }
-      final GoogleSignInAccount gUser = await GoogleSignIn.instance.authenticate();
+      final GoogleSignInAccount gUser =
+          await GoogleSignIn.instance.authenticate();
 
       final GoogleSignInAuthentication gAuth = gUser.authentication;
       final GoogleSignInClientAuthorization gAuthz =
@@ -110,11 +139,32 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
 
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       await prefs.setString('storeId', storeId);
+      await prefs.remove('isOfflineMode'); // Google = not offline
 
-      state = AsyncData<AuthState>(
-        state.value!.copyWith(isLoading: false, storeId: storeId),
-      );
-      return storeId;
+      // Check if this store already exists in Firestore (restore on new device)
+      String? existingStoreName;
+      try {
+        final DocumentSnapshot<Map<String, dynamic>> doc =
+            await FirebaseFirestore.instance
+                .collection('stores')
+                .doc(storeId)
+                .collection('profile')
+                .doc('info')
+                .get();
+        if (doc.exists) {
+          existingStoreName = doc.data()?['storeName'] as String?;
+        }
+      } catch (_) {
+        // Firestore check failed — treat as new store (non-fatal)
+      }
+
+      state = AsyncData<AuthState>(state.value!.copyWith(
+        isLoading: false,
+        storeId: storeId,
+        isOfflineMode: false,
+      ));
+      return GoogleLinkResult(
+          storeId: storeId, existingStoreName: existingStoreName);
     } catch (e) {
       state = AsyncData<AuthState>(state.value!.copyWith(
         isLoading: false,
@@ -124,16 +174,35 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     }
   }
 
+  // ─── Offline Mode ──────────────────────────────────────────────────────────
+
+  /// Set up a local-only store (no Google account required).
+  /// Generates a local UUID as `storeId` and skips all cloud sync.
+  Future<bool> continueOffline(String pin, String storeName) async {
+    state = AsyncData<AuthState>(
+        state.value!.copyWith(isLoading: true, clearError: true));
+    final String localStoreId = _uuid.v4();
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setString('storeId', localStoreId);
+    await prefs.setBool('isOfflineMode', true);
+    state = AsyncData<AuthState>(state.value!.copyWith(
+      storeId: localStoreId,
+      isOfflineMode: true,
+      isLoading: false,
+    ));
+    return register(pin, storeName);
+  }
+
   // ─── Registration ──────────────────────────────────────────────────────────
 
   /// Register the owner PIN + store name. Automatically logs the user in.
-  /// Must be called AFTER [linkStoreWithGoogle] has succeeded.
+  /// Must be called after [linkStoreWithGoogle] or [continueOffline].
   Future<bool> register(String pin, String storeName) async {
     final AuthState current = state.value!;
 
     if (current.storeId == null) {
       state = AsyncData<AuthState>(current.copyWith(
-        errorMessage: 'Please link your store with Google first.',
+        errorMessage: 'Please complete sign-in first.',
       ));
       return false;
     }
@@ -144,13 +213,33 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       return false;
     }
 
+    final String trimmedName =
+        storeName.trim().isEmpty ? 'My Store' : storeName.trim();
+
     final UserCredential user = UserCredential(
       userId: _uuid.v4(),
       pinHash: hashPin(pin),
       role: 'owner',
-      storeName: storeName.trim().isEmpty ? 'My Store' : storeName.trim(),
+      storeName: trimmedName,
     );
     await _dao.insert(user);
+
+    // Write store profile to Firestore (skip if offline-only mode)
+    if (!current.isOfflineMode && current.storeId != null) {
+      try {
+        await FirebaseFirestore.instance
+            .collection('stores')
+            .doc(current.storeId)
+            .collection('profile')
+            .doc('info')
+            .set(<String, dynamic>{
+          'storeName': trimmedName,
+          'createdAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      } catch (_) {
+        // Non-fatal — local data is already saved; sync will retry
+      }
+    }
 
     // Auto-login: mark as logged in immediately after registration.
     state = AsyncData<AuthState>(current.copyWith(
@@ -208,7 +297,8 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
   /// Login with PIN.
   Future<bool> login(String pin) async {
     final AuthState currentState = state.value!;
-    state = AsyncData<AuthState>(currentState.copyWith(isLoading: true, clearError: true));
+    state = AsyncData<AuthState>(
+        currentState.copyWith(isLoading: true, clearError: true));
 
     final String hashed = hashPin(pin);
     final UserCredential? user = await _dao.getUserByPinHash(hashed);
@@ -248,16 +338,19 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
   Future<void> logout() async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     final String? storeId = prefs.getString('storeId');
+    final bool isOfflineMode = prefs.getBool('isOfflineMode') ?? false;
     final bool hasOwner = await _dao.exists();
     state = AsyncData<AuthState>(AuthState(
       isFirstRun: !hasOwner || storeId == null,
       storeId: storeId,
+      isOfflineMode: isOfflineMode,
     ));
   }
 
   Future<void> clearStoreLink() async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.remove('storeId');
+    await prefs.remove('isOfflineMode');
     await fb_auth.FirebaseAuth.instance.signOut();
     if (_googleSignInInitialized) {
       await GoogleSignIn.instance.signOut();

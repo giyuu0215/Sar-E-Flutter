@@ -25,6 +25,9 @@ class _MainShellState extends ConsumerState<MainShell> {
   int _index = 0;
 
   void _logout() {
+    // Pop all pushed routes (e.g. ProfileScreen) before state changes,
+    // otherwise the old stack persists on top of the new LoginScreen.
+    Navigator.of(context).popUntil((Route<dynamic> route) => route.isFirst);
     ref.read(authProvider.notifier).logout();
   }
 

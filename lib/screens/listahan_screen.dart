@@ -255,9 +255,7 @@ class _ListahanContentState extends ConsumerState<_ListahanContent> {
             ElevatedButton(
               onPressed: () async {
                 if (nameCtrl.text.trim().isEmpty) return;
-                final NavigatorState nav = Navigator.of(ctx2);
-                final NavigatorState parentNav = Navigator.of(ctx);
-                nav.pop();
+                // Create the customer, then close ONLY this inner dialog.
                 final Customer c =
                     await ref.read(listahanProvider.notifier).addCustomer(
                           nameCtrl.text.trim(),
@@ -265,7 +263,7 @@ class _ListahanContentState extends ConsumerState<_ListahanContent> {
                               ? null
                               : mobileCtrl.text.trim(),
                         );
-                parentNav.pop(c);
+                if (ctx2.mounted) Navigator.pop(ctx2, c);
               },
               style: ElevatedButton.styleFrom(
                   backgroundColor: appColors(ctx2).primary,
