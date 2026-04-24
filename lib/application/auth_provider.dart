@@ -224,21 +224,19 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     );
     await _dao.insert(user);
 
-    // Write store profile to Firestore (skip if offline-only mode)
+    // Write store profile to Firestore — fire-and-forget so it NEVER blocks
+    // registration (network issues or security rules won't freeze the flow).
     if (!current.isOfflineMode && current.storeId != null) {
-      try {
-        await FirebaseFirestore.instance
-            .collection('stores')
-            .doc(current.storeId)
-            .collection('profile')
-            .doc('info')
-            .set(<String, dynamic>{
-          'storeName': trimmedName,
-          'createdAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-      } catch (_) {
-        // Non-fatal — local data is already saved; sync will retry
-      }
+      FirebaseFirestore.instance
+          .collection('stores')
+          .doc(current.storeId)
+          .collection('profile')
+          .doc('info')
+          .set(<String, dynamic>{
+        'storeName': trimmedName,
+        'createdAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true))
+          .catchError((_) {}); // ignore errors — background sync handles retries
     }
 
     // Auto-login: mark as logged in immediately after registration.
