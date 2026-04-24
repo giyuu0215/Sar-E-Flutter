@@ -8,7 +8,7 @@ import '../theme/app_theme.dart';
 
 final AutoDisposeFutureProvider<List<Transaction>> allTransactionsProvider =
     FutureProvider.autoDispose<List<Transaction>>(
-        (AutoDisposeFutureProviderRef<List<Transaction>> ref) async {
+        (Ref ref) async {
   final TransactionDao dao = TransactionDao();
   return dao.getRecent(limit: 200);
 });

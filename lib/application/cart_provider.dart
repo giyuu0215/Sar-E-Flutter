@@ -10,6 +10,7 @@ import '../domain/entities/transaction.dart';
 import 'analytics_provider.dart';
 import 'auth_provider.dart';
 import 'inventory_provider.dart';
+import 'notifications_provider.dart';
 import 'sync_provider.dart';
 
 const Uuid _uuid = Uuid();
@@ -181,8 +182,8 @@ class CartNotifier extends Notifier<CartState> {
 
       final bool isCash = state.paymentMethod == 'cash';
       // For ewallet: cashier confirms payment received → mark completed immediately
-      final String txnStatus = 'completed';
-      final String payStatus = 'confirmed';
+      const String txnStatus = 'completed';
+      const String payStatus = 'confirmed';
 
       final Transaction txn = Transaction(
         transactionId: txnId,
@@ -293,6 +294,8 @@ class CartNotifier extends Notifier<CartState> {
       ref.invalidate(inventoryProvider);
       // Refresh analytics so chart & KPIs update without tab switch (fixes D)
       ref.invalidate(analyticsProvider);
+      // Refresh notifications (low stock alerts) (fixes E)
+      ref.invalidate(notificationsProvider);
 
       return true;
     } catch (e) {

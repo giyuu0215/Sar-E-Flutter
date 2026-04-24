@@ -6,6 +6,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
 import '../application/cart_provider.dart';
 import '../domain/entities/product.dart';
@@ -378,13 +381,12 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
         (data['payment_method'] as String? ?? 'cash').toUpperCase();
     final double total = (data['total'] as num?)?.toDouble() ?? 0;
     final double changeDue = ref.read(cartProvider).changeDue;
-    final String dateStr = receipt.timestamp != null
-        ? '${receipt.timestamp!.year}-'
-            '${receipt.timestamp!.month.toString().padLeft(2, '0')}-'
-            '${receipt.timestamp!.day.toString().padLeft(2, '0')} '
-            '${receipt.timestamp!.hour.toString().padLeft(2, '0')}:'
-            '${receipt.timestamp!.minute.toString().padLeft(2, '0')}'
-        : '';
+    final String dateStr =
+        '${receipt.timestamp.year}-'
+        '${receipt.timestamp.month.toString().padLeft(2, '0')}-'
+        '${receipt.timestamp.day.toString().padLeft(2, '0')} '
+        '${receipt.timestamp.hour.toString().padLeft(2, '0')}:'
+        '${receipt.timestamp.minute.toString().padLeft(2, '0')}';
 
     await showDialog<void>(
       context: context,
@@ -409,7 +411,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                   ),
                   child: Column(
                     children: <Widget>[
-                      Icon(Icons.check_circle_rounded,
+                      const Icon(Icons.check_circle_rounded,
                           color: Colors.white, size: 36),
                       const SizedBox(height: 6),
                       Text(
@@ -575,16 +577,37 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                 Padding(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: () => Navigator.pop(ctx),
-                      icon: const Icon(Icons.check, size: 18),
-                      label: const Text('Done'),
-                      style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green.shade600,
-                          foregroundColor: Colors.white),
-                    ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () => _shareReceiptPdf(receipt, items, dateStr),
+                          icon: const Icon(Icons.share_outlined, size: 18),
+                          label: const Text('Share PDF'),
+                          style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(20))),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () => Navigator.pop(ctx),
+                          icon: const Icon(Icons.check, size: 18),
+                          label: const Text('Done'),
+                          style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green.shade600,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(20))),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -593,6 +616,73 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
         );
       },
     );
+  }
+
+  Future<void> _shareReceiptPdf(Receipt receipt, List<dynamic> items, String dateStr) async {
+    final pw.Document doc = pw.Document();
+
+    doc.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.roll80,
+        margin: const pw.EdgeInsets.all(16),
+        build: (pw.Context ctx) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: <pw.Widget>[
+              pw.Center(
+                child: pw.Text('SAR-E RECEIPT',
+                    style: pw.TextStyle(
+                        fontSize: 16, fontWeight: pw.FontWeight.bold)),
+              ),
+              pw.Center(
+                child: pw.Text(receipt.storeName,
+                    style: const pw.TextStyle(fontSize: 12)),
+              ),
+              pw.SizedBox(height: 10),
+              pw.Text('Receipt #: ${receipt.receiptId.substring(0, 8).toUpperCase()}'),
+              pw.Text('Date: $dateStr'),
+              pw.Divider(),
+              ...items.map((dynamic it) {
+                final Map<String, dynamic> item = it as Map<String, dynamic>;
+                final String name = item['name'] as String? ?? '-';
+                final int qty = (item['qty'] as num?)?.toInt() ?? 1;
+                final double price = (item['price'] as num?)?.toDouble() ?? 0;
+                return pw.Padding(
+                  padding: const pw.EdgeInsets.symmetric(vertical: 2),
+                  child: pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: <pw.Widget>[
+                      pw.Expanded(child: pw.Text('$qty x $name')),
+                      pw.Text('PHP ${(qty * price).toStringAsFixed(2)}'),
+                    ],
+                  ),
+                );
+              }),
+              pw.Divider(),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: <pw.Widget>[
+                  pw.Text('TOTAL',
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                  pw.Text(
+                    'PHP ${items.fold<double>(0, (double sum, dynamic it) => sum + ((it['qty'] as num).toDouble() * (it['price'] as num).toDouble())).toStringAsFixed(2)}',
+                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                  ),
+                ],
+              ),
+              pw.SizedBox(height: 20),
+              pw.Center(
+                child: pw.Text('Thank you!',
+                    style: const pw.TextStyle(fontSize: 10)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    await Printing.sharePdf(
+        bytes: await doc.save(), filename: 'receipt_${receipt.receiptId}.pdf');
   }
 
   // Scan barcode → find product by barcode → add to cart directly
@@ -645,11 +735,19 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                   Text('POS',
                       style: Theme.of(context).textTheme.titleLarge),
                   const Spacer(),
-                  // Always-visible scan button
-                  IconButton.filledTonal(
+                  // Enlarged always-visible scan button
+                  ElevatedButton.icon(
                     onPressed: _scanAndAdd,
-                    icon: const Icon(Icons.qr_code_scanner, size: 20),
-                    tooltip: 'Scan barcode',
+                    icon: const Icon(Icons.qr_code_scanner, size: 18),
+                    label: const Text('SCAN'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: c.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16)),
+                    ),
                   ),
                   const SizedBox(width: 6),
                   IconButton.filledTonal(
@@ -947,44 +1045,60 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                     fontSize: 22,
                   ),
                 ),
+                const SizedBox(height: 2),
                 Text(
                   '${cart.items.length} item${cart.items.length == 1 ? '' : 's'}',
                   style: TextStyle(
-                      color: c.textSecondary, fontSize: 11),
+                      color: c.textSecondary, fontSize: 10),
                 ),
               ],
             ),
             const Spacer(),
             // Clear
             if (!cart.isEmpty)
-              TextButton.icon(
+              TextButton(
                 onPressed:
                     ref.read(cartProvider.notifier).clearCart,
-                icon: Icon(Icons.delete_outline, color: c.error),
-                label: Text('Clear',
-                    style: TextStyle(color: c.error)),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+                child: Text('Clear',
+                    style: TextStyle(color: c.error, fontSize: 13)),
               ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 4),
             // Checkout
-            ElevatedButton.icon(
-              onPressed:
-                  cart.isProcessing ? null : _showCheckoutDialog,
-              icon: cart.isProcessing
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white))
-                  : const Icon(Icons.shopping_cart_checkout,
-                      size: 18),
-              label: const Text('Checkout'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: c.primary,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 12),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14)),
+            SizedBox(
+              height: 44,
+              child: ElevatedButton(
+                onPressed:
+                    cart.isProcessing ? null : _showCheckoutDialog,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: c.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  elevation: 0,
+                ),
+                child: cart.isProcessing
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white))
+                    : const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          Icon(Icons.shopping_cart_checkout,
+                              size: 18),
+                          SizedBox(width: 8),
+                          Text('Checkout',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.w700)),
+                        ],
+                      ),
               ),
             ),
           ]),

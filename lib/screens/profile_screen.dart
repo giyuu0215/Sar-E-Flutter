@@ -670,7 +670,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                     width: 160,
                                     height: 160,
                                     child: QrImageView(
-                                      data: data!,
+                                      data: data,
                                       version: QrVersions.auto,
                                       size: 160,
                                       backgroundColor: Colors.transparent,
@@ -708,7 +708,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                 ClipRRect(
                                   borderRadius: BorderRadius.circular(12),
                                   child: Image.file(
-                                      File(data!.substring(6)),
+                                      File(data.substring(6)),
                                       height: 140,
                                       fit: BoxFit.contain),
                                 ),
