@@ -26,6 +26,8 @@ class _SetupScreenState extends ConsumerState<SetupScreen>
   bool _isLoading = false;
   String? _error;
   GoogleLinkResult? _googleResult; // set after a successful Google Sign-In
+  bool _isResettingPin =
+      false; // true when user taps "Forgot PIN?" on existing store
 
   // Form fields
   final TextEditingController _nameCtrl = TextEditingController();
@@ -107,8 +109,82 @@ class _SetupScreenState extends ConsumerState<SetupScreen>
     final String confirm = _confirmCtrl.text;
     final String name = _nameCtrl.text.trim();
 
-    // Validate name (not needed for googleExisting — name is pre-filled)
-    if (_mode != _SetupMode.googleExisting && name.isEmpty) {
+    // ── googleExisting: verify PIN against cloud hash (or reset) ──
+    if (_mode == _SetupMode.googleExisting && !_isResettingPin) {
+      if (pin.length < 4) {
+        setState(() => _error = 'PIN must be at least 4 digits.');
+        return;
+      }
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+
+      final String enteredHash = hashPin(pin);
+      final String? cloudHash = _googleResult?.cloudPinHash;
+
+      // If no cloud hash (legacy store), fall back to creating a new record
+      if (cloudHash == null || cloudHash.isEmpty) {
+        final bool ok = await ref
+            .read(authProvider.notifier)
+            .register(pin, _googleResult?.existingStoreName ?? 'My Store');
+        if (mounted && !ok) {
+          setState(() {
+            _isLoading = false;
+            _error = 'Setup failed.';
+          });
+        }
+        return;
+      }
+
+      if (enteredHash != cloudHash) {
+        setState(() {
+          _isLoading = false;
+          _error = 'Invalid PIN. Try again or tap Forgot PIN.';
+        });
+        return;
+      }
+
+      // PIN matches — create local user record
+      final bool ok = await ref
+          .read(authProvider.notifier)
+          .register(pin, _googleResult?.existingStoreName ?? 'My Store');
+      if (mounted && !ok) {
+        setState(() {
+          _isLoading = false;
+          _error = 'Setup failed.';
+        });
+      }
+      return;
+    }
+
+    // ── googleExisting + resetting PIN ──
+    if (_mode == _SetupMode.googleExisting && _isResettingPin) {
+      if (pin.length < 4) {
+        setState(() => _error = 'PIN must be at least 4 digits.');
+        return;
+      }
+      if (pin != confirm) {
+        setState(() => _error = 'PINs do not match.');
+        return;
+      }
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+      final bool ok = await ref.read(authProvider.notifier).resetPinFromSetup(
+          pin, _googleResult?.existingStoreName ?? 'My Store');
+      if (mounted && !ok) {
+        setState(() {
+          _isLoading = false;
+          _error = 'Reset failed.';
+        });
+      }
+      return;
+    }
+
+    // ── googleNew / offline: original flow ──
+    if (name.isEmpty) {
       setState(() => _error = 'Please enter your store name.');
       return;
     }
@@ -130,17 +206,14 @@ class _SetupScreenState extends ConsumerState<SetupScreen>
     if (_mode == _SetupMode.offline) {
       ok = await ref.read(authProvider.notifier).continueOffline(pin, name);
     } else {
-      // googleNew or googleExisting — storeId already set by linkStoreWithGoogle
-      ok = await ref
-          .read(authProvider.notifier)
-          .register(pin, _mode == _SetupMode.googleExisting ? _nameCtrl.text : name);
+      ok = await ref.read(authProvider.notifier).register(pin, name);
     }
 
     if (mounted && !ok) {
       final String? msg = ref.read(authProvider).value?.errorMessage;
       setState(() {
         _isLoading = false;
-        _error = msg ?? 'Setup failed. Please try again.';
+        _error = msg ?? 'Setup failed.';
       });
     }
   }
@@ -182,13 +255,22 @@ class _SetupScreenState extends ConsumerState<SetupScreen>
           subtitle: 'Google account linked. Enter your store details.',
           showNameField: true,
         ),
-      _SetupMode.googleExisting => _buildForm(
-          c,
-          title: 'Welcome Back! 👋',
-          subtitle:
-              'Found your store "${_googleResult?.existingStoreName ?? 'My Store'}". Create a PIN for this device.',
-          showNameField: false,
-        ),
+      _SetupMode.googleExisting => _isResettingPin
+          ? _buildForm(
+              c,
+              title: 'Reset Your PIN 🔒',
+              subtitle:
+                  'Create a new PIN for "${_googleResult?.existingStoreName ?? 'My Store'}".',
+              showNameField: false,
+            )
+          : _buildForm(
+              c,
+              title: 'Welcome Back! 👋',
+              subtitle:
+                  'Found your store "${_googleResult?.existingStoreName ?? 'My Store'}". Enter your PIN to continue.',
+              showNameField: false,
+              isEnterPinMode: true,
+            ),
       _SetupMode.offline => _buildForm(
           c,
           title: 'Offline Setup',
@@ -220,9 +302,7 @@ class _SetupScreenState extends ConsumerState<SetupScreen>
             const SizedBox(height: 24),
             Text('Welcome to Sar-E',
                 style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w800,
-                    color: c.text)),
+                    fontSize: 28, fontWeight: FontWeight.w800, color: c.text)),
             const SizedBox(height: 8),
             Text(
               'Set up your point-of-sale in seconds.',
@@ -298,6 +378,7 @@ class _SetupScreenState extends ConsumerState<SetupScreen>
     required String title,
     required String subtitle,
     required bool showNameField,
+    bool isEnterPinMode = false,
   }) {
     return Center(
       child: SingleChildScrollView(
@@ -326,25 +407,20 @@ class _SetupScreenState extends ConsumerState<SetupScreen>
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
-                    Icon(Icons.wifi_off_rounded,
-                        size: 14, color: c.warning),
+                    Icon(Icons.wifi_off_rounded, size: 14, color: c.warning),
                     const SizedBox(width: 6),
                     Text('Offline Mode — No cloud sync',
-                        style:
-                            TextStyle(fontSize: 12, color: c.warning)),
+                        style: TextStyle(fontSize: 12, color: c.warning)),
                   ],
                 ),
               ),
 
             Text(title,
                 style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w800,
-                    color: c.text)),
+                    fontSize: 24, fontWeight: FontWeight.w800, color: c.text)),
             const SizedBox(height: 6),
             Text(subtitle,
-                style:
-                    TextStyle(color: c.textSecondary, fontSize: 14)),
+                style: TextStyle(color: c.textSecondary, fontSize: 14)),
             const SizedBox(height: 28),
 
             if (showNameField) ...<Widget>[
@@ -360,7 +436,7 @@ class _SetupScreenState extends ConsumerState<SetupScreen>
               const SizedBox(height: 20),
             ],
 
-            _label('Create PIN', c),
+            _label(isEnterPinMode ? 'Enter PIN' : 'Create PIN', c),
             const SizedBox(height: 6),
             TextField(
               controller: _pinCtrl,
@@ -372,38 +448,60 @@ class _SetupScreenState extends ConsumerState<SetupScreen>
                 LengthLimitingTextInputFormatter(8),
               ],
               decoration: _inputDec(
-                'At least 4 digits',
+                isEnterPinMode ? 'Enter your PIN' : 'At least 4 digits',
                 Icons.lock_outline,
               ).copyWith(
                 suffixIcon: IconButton(
                   icon: Icon(
                       _pinVisible ? Icons.visibility_off : Icons.visibility),
-                  onPressed: () =>
-                      setState(() => _pinVisible = !_pinVisible),
+                  onPressed: () => setState(() => _pinVisible = !_pinVisible),
                 ),
               ),
+              onSubmitted: isEnterPinMode ? (_) => _submitForm() : null,
             ),
-            const SizedBox(height: 16),
 
-            _label('Confirm PIN', c),
-            const SizedBox(height: 6),
-            TextField(
-              controller: _confirmCtrl,
-              enabled: !_isLoading,
-              obscureText: !_pinVisible,
-              keyboardType: TextInputType.number,
-              inputFormatters: <TextInputFormatter>[
-                FilteringTextInputFormatter.digitsOnly,
-                LengthLimitingTextInputFormatter(8),
-              ],
-              decoration: _inputDec('Re-enter PIN', Icons.lock_outline),
-              onSubmitted: (_) => _submitForm(),
-            ),
+            // "Forgot PIN?" link for existing stores
+            if (isEnterPinMode) ...<Widget>[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () {
+                    _pinCtrl.clear();
+                    _confirmCtrl.clear();
+                    setState(() {
+                      _isResettingPin = true;
+                      _error = null;
+                    });
+                  },
+                  child: Text('Forgot PIN?',
+                      style: TextStyle(color: c.primary, fontSize: 13)),
+                ),
+              ),
+            ],
+
+            // Show confirm field only when NOT in enter-pin mode
+            if (!isEnterPinMode) ...<Widget>[
+              const SizedBox(height: 16),
+              _label('Confirm PIN', c),
+              const SizedBox(height: 6),
+              TextField(
+                controller: _confirmCtrl,
+                enabled: !_isLoading,
+                obscureText: !_pinVisible,
+                keyboardType: TextInputType.number,
+                inputFormatters: <TextInputFormatter>[
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(8),
+                ],
+                decoration: _inputDec('Re-enter PIN', Icons.lock_outline),
+                onSubmitted: (_) => _submitForm(),
+              ),
+            ],
 
             if (_error != null) ...<Widget>[
               const SizedBox(height: 14),
-              Text(_error!,
-                  style: TextStyle(color: c.error, fontSize: 13)),
+              Text(_error!, style: TextStyle(color: c.error, fontSize: 13)),
             ],
 
             const SizedBox(height: 28),
@@ -441,9 +539,7 @@ class _SetupScreenState extends ConsumerState<SetupScreen>
   Widget _label(String text, AppColors c) => Text(
         text,
         style: TextStyle(
-            fontWeight: FontWeight.w600,
-            fontSize: 13,
-            color: c.textSecondary),
+            fontWeight: FontWeight.w600, fontSize: 13, color: c.textSecondary),
       );
 
   InputDecoration _inputDec(String hint, IconData icon) => InputDecoration(
@@ -481,20 +577,20 @@ class _GPainter extends CustomPainter {
     final double r = size.width / 2;
 
     p.color = const Color(0xFF4285F4); // Blue
-    canvas.drawArc(Rect.fromCircle(center: Offset(cx, cy), radius: r),
-        -1.57, 3.14, true, p);
+    canvas.drawArc(Rect.fromCircle(center: Offset(cx, cy), radius: r), -1.57,
+        3.14, true, p);
 
     p.color = const Color(0xFF34A853); // Green
-    canvas.drawArc(Rect.fromCircle(center: Offset(cx, cy), radius: r),
-        1.57, 1.57, true, p);
+    canvas.drawArc(Rect.fromCircle(center: Offset(cx, cy), radius: r), 1.57,
+        1.57, true, p);
 
     p.color = const Color(0xFFFBBC05); // Yellow
-    canvas.drawArc(Rect.fromCircle(center: Offset(cx, cy), radius: r),
-        3.14, 0.79, true, p);
+    canvas.drawArc(Rect.fromCircle(center: Offset(cx, cy), radius: r), 3.14,
+        0.79, true, p);
 
     p.color = const Color(0xFFEA4335); // Red
-    canvas.drawArc(Rect.fromCircle(center: Offset(cx, cy), radius: r),
-        3.93, 0.79, true, p);
+    canvas.drawArc(Rect.fromCircle(center: Offset(cx, cy), radius: r), 3.93,
+        0.79, true, p);
 
     // White inner circle
     p.color = Colors.white;

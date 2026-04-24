@@ -44,8 +44,7 @@ class AnalyticsState {
   final List<Transaction> recentTransactions;
   final bool isLoading;
 
-  double get profitMargin =>
-      revenue > 0 ? (grossProfit / revenue) * 100 : 0;
+  double get profitMargin => revenue > 0 ? (grossProfit / revenue) * 100 : 0;
 
   AnalyticsState copyWith({
     AnalyticsPeriod? period,
@@ -79,11 +78,9 @@ class AnalyticsNotifier extends AsyncNotifier<AnalyticsState> {
 
   Future<AnalyticsState> _load(AnalyticsPeriod period) async {
     final DateTime now = DateTime.now();
-    final DateTime start =
-        DateTime(now.year, now.month, now.day)
-            .subtract(Duration(days: period.days - 1));
-    final DateTime end =
-        DateTime(now.year, now.month, now.day, 23, 59, 59);
+    final DateTime start = DateTime(now.year, now.month, now.day)
+        .subtract(Duration(days: period.days - 1));
+    final DateTime end = DateTime(now.year, now.month, now.day, 23, 59, 59);
 
     final Map<String, double> summary =
         await _dao.getSummaryForRange(start, end);
@@ -121,10 +118,8 @@ class AnalyticsNotifier extends AsyncNotifier<AnalyticsState> {
   }
 
   Future<void> refresh() async {
-    final AnalyticsPeriod p =
-        state.value?.period ?? AnalyticsPeriod.weekly;
-    state = AsyncData<AnalyticsState>(
-        state.value!.copyWith(isLoading: true));
+    final AnalyticsPeriod p = state.value?.period ?? AnalyticsPeriod.weekly;
+    state = AsyncData<AnalyticsState>(state.value!.copyWith(isLoading: true));
     state = AsyncData<AnalyticsState>(await _load(p));
   }
 }

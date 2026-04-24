@@ -38,8 +38,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget build(BuildContext context) {
     final AppColors c = appColors(context);
     final bool dark = Theme.of(context).brightness == Brightness.dark;
-    final AuthState auth =
-        ref.watch(authProvider).value ?? const AuthState();
+    final AuthState auth = ref.watch(authProvider).value ?? const AuthState();
 
     // storeNameHint is populated even when logged out (loaded from DB in build())
     final String storeName = auth.storeNameHint ?? 'My Store';
@@ -119,8 +118,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           const SizedBox(height: 4),
                           Text(
                             'Enter your PIN to continue',
-                            style: TextStyle(
-                                color: c.textSecondary, fontSize: 13),
+                            style:
+                                TextStyle(color: c.textSecondary, fontSize: 13),
                           ),
                           const SizedBox(height: 20),
                           // ── PIN input ──────────────────────────────────
@@ -183,8 +182,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             children: <Widget>[
                               Expanded(
                                 child: ElevatedButton(
-                                  onPressed:
-                                      auth.isLoading ? null : _submit,
+                                  onPressed: auth.isLoading ? null : _submit,
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: c.primary,
                                     foregroundColor: dark
@@ -229,21 +227,34 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                     side: BorderSide(color: c.primary),
                                   ),
                                 ),
-                                child:
-                                    const Icon(Icons.fingerprint, size: 26),
+                                child: const Icon(Icons.fingerprint, size: 26),
                               ),
                             ],
                           ),
                           const SizedBox(height: 16),
-                          // Contextual PIN recovery hint
-                          Text(
-                            auth.isOfflineMode
-                                ? 'Forgot PIN? Reinstall the app to reset (offline — no cloud backup).'
-                                : 'Forgot PIN? Sign in with Google again to restore access.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                                color: c.textTertiary, fontSize: 12),
-                          ),
+                          // Contextual PIN recovery
+                          if (auth.isOfflineMode)
+                            Text(
+                              'Forgot PIN? Reinstall the app to reset (offline — no cloud backup).',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                  color: c.textTertiary, fontSize: 12),
+                            )
+                          else
+                            TextButton(
+                              onPressed: () async {
+                                // Sign out to return to setup screen where
+                                // they can re-authenticate with Google and
+                                // use the "Forgot PIN?" reset flow.
+                                await ref.read(authProvider.notifier).signOut();
+                              },
+                              child: Text(
+                                'Forgot PIN? Sign in with Google again to reset.',
+                                textAlign: TextAlign.center,
+                                style:
+                                    TextStyle(color: c.primary, fontSize: 12),
+                              ),
+                            ),
                         ],
                       ),
                     ),

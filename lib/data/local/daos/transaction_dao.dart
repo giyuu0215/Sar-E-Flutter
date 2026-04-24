@@ -44,7 +44,9 @@ class TransactionDao {
       orderBy: 'timestamp DESC',
       limit: limit,
     );
-    return rows.map((Map<String, dynamic> r) => Transaction.fromMap(r)).toList();
+    return rows
+        .map((Map<String, dynamic> r) => Transaction.fromMap(r))
+        .toList();
   }
 
   Future<Transaction?> getById(String transactionId) async {
@@ -58,8 +60,7 @@ class TransactionDao {
     return Transaction.fromMap(rows.first);
   }
 
-  Future<List<TransactionLineItem>> getLineItems(
-      String transactionId) async {
+  Future<List<TransactionLineItem>> getLineItems(String transactionId) async {
     final Database db = await _db;
     final List<Map<String, dynamic>> rows = await db.rawQuery('''
       SELECT li.*, p.name AS product_name
@@ -113,7 +114,8 @@ class TransactionDao {
   }
 
   Future<List<Map<String, dynamic>>> getTopProducts(
-      DateTime start, DateTime end, {int limit = 10}) async {
+      DateTime start, DateTime end,
+      {int limit = 10}) async {
     final Database db = await _db;
     return db.rawQuery('''
       SELECT
@@ -137,10 +139,12 @@ class TransactionDao {
     final Database db = await _db;
     // Compute start in local time — SQLite datetime('now') is UTC which
     // causes a timezone mismatch when transactions are stored as local ISO8601.
-    final String startIso = DateTime.now()
-        .subtract(Duration(days: days))
-        .toIso8601String();
-    return db.rawQuery('''
+    final DateTime now = DateTime.now();
+    final DateTime start = DateTime(now.year, now.month, now.day)
+        .subtract(Duration(days: days - 1));
+    final String startIso = start.toIso8601String();
+
+    final List<Map<String, dynamic>> rawRows = await db.rawQuery('''
       SELECT
         date(t.timestamp) AS day,
         COALESCE(SUM(t.total_amount), 0) AS revenue,
@@ -156,5 +160,26 @@ class TransactionDao {
       GROUP BY date(t.timestamp)
       ORDER BY day ASC
     ''', <String>[startIso]);
+
+    // Build a map for quick lookup by date string
+    final Map<String, Map<String, dynamic>> byDay =
+        <String, Map<String, dynamic>>{};
+    for (final Map<String, dynamic> row in rawRows) {
+      byDay[row['day'] as String] = row;
+    }
+
+    // Fill in every day in the range so the chart is continuous
+    final List<Map<String, dynamic>> filled = <Map<String, dynamic>>[];
+    for (int i = 0; i < days; i++) {
+      final DateTime d = start.add(Duration(days: i));
+      final String key =
+          '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+      if (byDay.containsKey(key)) {
+        filled.add(byDay[key]!);
+      } else {
+        filled.add(<String, dynamic>{'day': key, 'revenue': 0, 'cogs': 0});
+      }
+    }
+    return filled;
   }
 }

@@ -55,8 +55,7 @@ class CustomerDao {
     );
   }
 
-  Future<void> updateCreditBalance(
-      String customerId, double newBalance) async {
+  Future<void> updateCreditBalance(String customerId, double newBalance) async {
     final Database db = await _db;
     await db.rawUpdate(
       'UPDATE customers SET credit_balance = ? WHERE customer_id = ?',

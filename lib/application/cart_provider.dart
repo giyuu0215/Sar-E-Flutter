@@ -50,10 +50,9 @@ class CartState {
   double get total =>
       items.fold<double>(0, (double s, CartItem i) => s + i.subtotal);
 
-  double get changeDue =>
-      paymentMethod == 'cash' && tenderedCash != null
-          ? (tenderedCash! - total).clamp(0, double.infinity)
-          : 0;
+  double get changeDue => paymentMethod == 'cash' && tenderedCash != null
+      ? (tenderedCash! - total).clamp(0, double.infinity)
+      : 0;
 
   bool get isEmpty => items.isEmpty;
 
@@ -90,8 +89,7 @@ class CartNotifier extends Notifier<CartState> {
   @override
   CartState build() => const CartState();
 
-  bool get _isOffline =>
-      ref.read(authProvider).value?.isOfflineMode ?? false;
+  bool get _isOffline => ref.read(authProvider).value?.isOfflineMode ?? false;
 
   // ── Search ───────────────────────────────────────────────────────────────
 
@@ -107,19 +105,25 @@ class CartNotifier extends Notifier<CartState> {
 
   // ── Cart management ──────────────────────────────────────────────────────
 
-  void addProduct(Product product) {
+  /// Returns a warning message if stock is insufficient, null on success.
+  String? addProduct(Product product) {
     final List<CartItem> items = List<CartItem>.from(state.items);
     final int idx = items
         .indexWhere((CartItem i) => i.product.productId == product.productId);
     if (idx >= 0) {
       final CartItem existing = items[idx];
-      if (existing.qty >= product.stockQty) return;
+      if (existing.qty >= product.stockQty) {
+        return '"${product.name}" has only ${product.stockQty} in stock';
+      }
       items[idx] = existing.copyWith(qty: existing.qty + 1);
     } else {
-      if (product.stockQty <= 0) return;
+      if (product.stockQty <= 0) {
+        return '"${product.name}" is out of stock';
+      }
       items.add(CartItem(product: product, qty: 1));
     }
     state = state.copyWith(items: items);
+    return null;
   }
 
   void removeItem(String productId) {
@@ -130,20 +134,22 @@ class CartNotifier extends Notifier<CartState> {
     );
   }
 
-  void changeQty(String productId, int delta) {
+  /// Returns a warning message if stock is exceeded, null on success.
+  String? changeQty(String productId, int delta) {
     final List<CartItem> items = List<CartItem>.from(state.items);
     final int idx =
         items.indexWhere((CartItem i) => i.product.productId == productId);
-    if (idx < 0) return;
+    if (idx < 0) return null;
     final int newQty = items[idx].qty + delta;
     if (newQty <= 0) {
       items.removeAt(idx);
     } else if (newQty > items[idx].product.stockQty) {
-      return;
+      return '"${items[idx].product.name}" has only ${items[idx].product.stockQty} in stock';
     } else {
       items[idx] = items[idx].copyWith(qty: newQty);
     }
     state = state.copyWith(items: items);
+    return null;
   }
 
   void clearCart() => state = const CartState();
@@ -164,7 +170,8 @@ class CartNotifier extends Notifier<CartState> {
     if (state.paymentMethod == 'cash') {
       if (state.tenderedCash == null || state.tenderedCash! < state.total) {
         state = state.copyWith(
-            error: 'Cash tendered must be at least PHP ${state.total.toStringAsFixed(2)}');
+            error:
+                'Cash tendered must be at least PHP ${state.total.toStringAsFixed(2)}');
         return false;
       }
     }
@@ -238,8 +245,10 @@ class CartNotifier extends Notifier<CartState> {
       final StringBuffer receiptText = StringBuffer();
       receiptText.writeln('=== SAR-E RECEIPT ===');
       receiptText.writeln(storeName);
-      receiptText.writeln('Date: ${now.year}-${now.month.toString().padLeft(2,'0')}-${now.day.toString().padLeft(2,'0')} ${now.hour.toString().padLeft(2,'0')}:${now.minute.toString().padLeft(2,'0')}');
-      receiptText.writeln('Receipt #: ${receiptId.substring(0, 8).toUpperCase()}');
+      receiptText.writeln(
+          'Date: ${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}');
+      receiptText
+          .writeln('Receipt #: ${receiptId.substring(0, 8).toUpperCase()}');
       receiptText.writeln('---------------------');
       for (final CartItem ci in state.items) {
         final String line =
@@ -285,6 +294,7 @@ class CartNotifier extends Notifier<CartState> {
             operation: 'create',
             payload: txn.toMap(),
           );
+          ref.read(syncProvider.notifier).sync(); // fire-and-forget
         } catch (_) {} // Non-fatal: sync will retry later
       }
 

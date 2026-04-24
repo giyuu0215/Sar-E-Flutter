@@ -39,7 +39,8 @@ class NotificationsNotifier extends AsyncNotifier<NotificationState> {
   }
 
   Future<void> fetchAlerts() async {
-    state = const AsyncData<NotificationState>(NotificationState(isLoading: true));
+    state =
+        const AsyncData<NotificationState>(NotificationState(isLoading: true));
     try {
       final Database db = await AppDatabase.instance;
 
@@ -47,7 +48,8 @@ class NotificationsNotifier extends AsyncNotifier<NotificationState> {
       final List<Map<String, dynamic>> productsRaw = await db.rawQuery(
         'SELECT * FROM products WHERE stock_quantity <= stock_threshold',
       );
-      final List<Product> lowStockProducts = productsRaw.map((m) => Product.fromMap(m)).toList();
+      final List<Product> lowStockProducts =
+          productsRaw.map((m) => Product.fromMap(m)).toList();
 
       // 2. Fetch overdue credits (due_date < NOW and status != 'settled')
       final String now = DateTime.now().toIso8601String();
@@ -55,7 +57,8 @@ class NotificationsNotifier extends AsyncNotifier<NotificationState> {
         "SELECT * FROM customers WHERE id IN (SELECT DISTINCT customer_id FROM credit_ledger WHERE due_date < ? AND status = 'active')",
         <String>[now],
       );
-      final List<Customer> overdueCredits = customersRaw.map((m) => Customer.fromMap(m)).toList();
+      final List<Customer> overdueCredits =
+          customersRaw.map((m) => Customer.fromMap(m)).toList();
 
       state = AsyncData<NotificationState>(NotificationState(
         lowStockProducts: lowStockProducts,
@@ -64,10 +67,12 @@ class NotificationsNotifier extends AsyncNotifier<NotificationState> {
       ));
     } catch (e) {
       // Return empty state on error but don't crash
-      state = const AsyncData<NotificationState>(NotificationState(isLoading: false));
+      state = const AsyncData<NotificationState>(
+          NotificationState(isLoading: false));
     }
   }
 }
 
 final notificationsProvider =
-    AsyncNotifierProvider<NotificationsNotifier, NotificationState>(NotificationsNotifier.new);
+    AsyncNotifierProvider<NotificationsNotifier, NotificationState>(
+        NotificationsNotifier.new);

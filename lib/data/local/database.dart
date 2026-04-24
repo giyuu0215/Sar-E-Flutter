@@ -286,9 +286,18 @@ class AppDatabase {
 
   static Future<void> _seedDefaultCategories(Database db) async {
     final List<String> names = <String>[
-      'Beverages', 'Snacks', 'Canned Goods', 'Instant Noodles',
-      'Condiments', 'Dairy & Eggs', 'Frozen Foods', 'Personal Care',
-      'Household', 'Tobacco', 'Alcohol', 'Other',
+      'Beverages',
+      'Snacks',
+      'Canned Goods',
+      'Instant Noodles',
+      'Condiments',
+      'Dairy & Eggs',
+      'Frozen Foods',
+      'Personal Care',
+      'Household',
+      'Tobacco',
+      'Alcohol',
+      'Other',
     ];
     final String now = DateTime.now().toIso8601String();
     for (final String name in names) {

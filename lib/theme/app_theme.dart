@@ -63,9 +63,11 @@ class AppColors {
       surfaceMuted: surfaceMuted,
       text: scheme.onSurface,
       textSecondary: scheme.onSurfaceVariant,
-      textTertiary: scheme.onSurfaceVariant.withValues(alpha: dark ? 0.72 : 0.64),
+      textTertiary:
+          scheme.onSurfaceVariant.withValues(alpha: dark ? 0.72 : 0.64),
       primary: scheme.primary,
-      primaryDark: Color.lerp(scheme.primary, Colors.black, dark ? 0.14 : 0.22)!,
+      primaryDark:
+          Color.lerp(scheme.primary, Colors.black, dark ? 0.14 : 0.22)!,
       accent: scheme.secondary,
       error: scheme.error,
       warning: const Color(0xFFF59E0B),
@@ -77,8 +79,7 @@ class AppColors {
 }
 
 ThemeData buildTheme(Brightness brightness, {ColorScheme? dynamicScheme}) {
-  final ColorScheme scheme =
-      dynamicScheme ??
+  final ColorScheme scheme = dynamicScheme ??
       ColorScheme.fromSeed(
         seedColor: _brandSeed,
         brightness: brightness,

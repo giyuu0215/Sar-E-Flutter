@@ -12,14 +12,12 @@ class InventoryScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final AsyncValue<InventoryState> asyncState =
-        ref.watch(inventoryProvider);
+    final AsyncValue<InventoryState> asyncState = ref.watch(inventoryProvider);
 
     return asyncState.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (Object e, _) => Center(child: Text('Error: $e')),
-      data: (InventoryState state) =>
-          _InventoryContent(state: state),
+      data: (InventoryState state) => _InventoryContent(state: state),
     );
   }
 }
@@ -30,14 +28,64 @@ class _InventoryContent extends ConsumerStatefulWidget {
   final InventoryState state;
 
   @override
-  ConsumerState<_InventoryContent> createState() =>
-      _InventoryContentState();
+  ConsumerState<_InventoryContent> createState() => _InventoryContentState();
 }
 
 class _InventoryContentState extends ConsumerState<_InventoryContent> {
   void _showMessage(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
+    );
+  }
+
+  Future<void> _openQuickStockDialog(Product product) async {
+    final TextEditingController qtyCtrl = TextEditingController();
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext ctx) {
+        return AlertDialog(
+          title: Text('Add Stock — ${product.name}'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Text('Current stock: ${product.stockQty}',
+                  style: TextStyle(color: appColors(ctx).textSecondary)),
+              const SizedBox(height: 12),
+              TextField(
+                controller: qtyCtrl,
+                autofocus: true,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Quantity to add',
+                  hintText: 'e.g. 50',
+                  prefixIcon: Icon(Icons.add),
+                ),
+              ),
+            ],
+          ),
+          actions: <Widget>[
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () async {
+                final int? addQty = int.tryParse(qtyCtrl.text);
+                if (addQty == null || addQty <= 0) return;
+                Navigator.pop(ctx);
+                await ref.read(inventoryProvider.notifier).updateStock(
+                      product.productId,
+                      product.stockQty + addQty,
+                    );
+                _showMessage('Added $addQty to ${product.name}');
+              },
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: appColors(ctx).primary,
+                  foregroundColor: Colors.white),
+              child: const Text('Add Stock'),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -75,7 +123,8 @@ class _InventoryContentState extends ConsumerState<_InventoryContent> {
                         suffixIcon: IconButton(
                           icon: const Icon(Icons.qr_code_scanner),
                           onPressed: () async {
-                            final String? code = await Navigator.of(context).push<String>(
+                            final String? code =
+                                await Navigator.of(context).push<String>(
                               MaterialPageRoute(
                                 builder: (_) => const BarcodeScannerView(),
                               ),
@@ -152,8 +201,7 @@ class _InventoryContentState extends ConsumerState<_InventoryContent> {
                           .toList(),
                       onChanged: (String? v) =>
                           setS(() => selectedCategoryId = v),
-                      decoration:
-                          const InputDecoration(labelText: 'Category'),
+                      decoration: const InputDecoration(labelText: 'Category'),
                     ),
                   ],
                 ),
@@ -165,13 +213,10 @@ class _InventoryContentState extends ConsumerState<_InventoryContent> {
                 ),
                 ElevatedButton(
                   onPressed: () async {
-                    final double price =
-                        double.tryParse(priceCtrl.text) ?? 0;
-                    final double cost =
-                        double.tryParse(costCtrl.text) ?? 0;
+                    final double price = double.tryParse(priceCtrl.text) ?? 0;
+                    final double cost = double.tryParse(costCtrl.text) ?? 0;
                     final int stock = int.tryParse(stockCtrl.text) ?? 0;
-                    final int threshold =
-                        int.tryParse(thresholdCtrl.text) ?? 5;
+                    final int threshold = int.tryParse(thresholdCtrl.text) ?? 5;
                     if (nameCtrl.text.trim().isEmpty || price <= 0) {
                       _showMessage('Please enter a valid name and price.');
                       return;
@@ -183,7 +228,9 @@ class _InventoryContentState extends ConsumerState<_InventoryContent> {
                     Navigator.pop(ctx);
                     await ref.read(inventoryProvider.notifier).addProduct(
                           name: nameCtrl.text.trim(),
-                          barcode: barcodeCtrl.text.trim().isEmpty ? null : barcodeCtrl.text.trim(),
+                          barcode: barcodeCtrl.text.trim().isEmpty
+                              ? null
+                              : barcodeCtrl.text.trim(),
                           unitPrice: price,
                           costPrice: cost,
                           stockQty: stock,
@@ -259,21 +306,19 @@ class _InventoryContentState extends ConsumerState<_InventoryContent> {
                       Expanded(
                         child: TextField(
                             controller: priceCtrl,
-                            keyboardType:
-                                const TextInputType.numberWithOptions(
-                                    decimal: true),
-                            decoration: const InputDecoration(
-                                labelText: 'Sell Price')),
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
+                            decoration:
+                                const InputDecoration(labelText: 'Sell Price')),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: TextField(
                             controller: costCtrl,
-                            keyboardType:
-                                const TextInputType.numberWithOptions(
-                                    decimal: true),
-                            decoration: const InputDecoration(
-                                labelText: 'Cost Price')),
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
+                            decoration:
+                                const InputDecoration(labelText: 'Cost Price')),
                       ),
                     ]),
                     const SizedBox(height: 10),
@@ -325,18 +370,14 @@ class _InventoryContentState extends ConsumerState<_InventoryContent> {
                     await ref.read(inventoryProvider.notifier).updateProduct(
                           product.copyWith(
                             barcode: barcodeCtrl.text.trim(),
-                            unitPrice:
-                                double.tryParse(priceCtrl.text) ??
-                                    product.unitPrice,
-                            costPrice:
-                                double.tryParse(costCtrl.text) ??
-                                    product.costPrice,
-                            stockQty:
-                                int.tryParse(stockCtrl.text) ??
-                                    product.stockQty,
-                            threshold:
-                                int.tryParse(thresholdCtrl.text) ??
-                                    product.threshold,
+                            unitPrice: double.tryParse(priceCtrl.text) ??
+                                product.unitPrice,
+                            costPrice: double.tryParse(costCtrl.text) ??
+                                product.costPrice,
+                            stockQty: int.tryParse(stockCtrl.text) ??
+                                product.stockQty,
+                            threshold: int.tryParse(thresholdCtrl.text) ??
+                                product.threshold,
                             categoryId: selectedCategoryId,
                           ),
                         );
@@ -402,247 +443,246 @@ class _InventoryContentState extends ConsumerState<_InventoryContent> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(14, 14, 14, 90),
         child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          // Header row
-          Row(
-            children: <Widget>[
-              const Icon(Icons.inventory_2_outlined),
-              const SizedBox(width: 8),
-              Text('Inventory',
-                  style: Theme.of(context).textTheme.titleLarge),
-              const Spacer(),
-              IconButton(
-                onPressed: () async {
-                  await ref
-                      .read(inventoryProvider.notifier)
-                      .recalculateAllSuggestions();
-                  _showMessage('Price suggestions updated');
-                },
-                icon: const Icon(Icons.auto_fix_high_outlined),
-                tooltip: 'Recalculate Price Suggestions',
-              ),
-              IconButton(
-                onPressed: _openAddCategoryDialog,
-                icon: const Icon(Icons.label_outline),
-                tooltip: 'Add Category',
-              ),
-              ElevatedButton.icon(
-                onPressed: _openAddProductDialog,
-                icon: const Icon(Icons.add, size: 16),
-                label: const Text('Add'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: c.primary,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16)),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            // Header row
+            Row(
+              children: <Widget>[
+                const Icon(Icons.inventory_2_outlined),
+                const SizedBox(width: 8),
+                Text('Inventory',
+                    style: Theme.of(context).textTheme.titleLarge),
+                const Spacer(),
+                IconButton(
+                  onPressed: () async {
+                    await ref
+                        .read(inventoryProvider.notifier)
+                        .recalculateAllSuggestions();
+                    _showMessage('Price suggestions updated');
+                  },
+                  icon: const Icon(Icons.auto_fix_high_outlined),
+                  tooltip: 'Recalculate Price Suggestions',
+                ),
+                IconButton(
+                  onPressed: _openAddCategoryDialog,
+                  icon: const Icon(Icons.label_outline),
+                  tooltip: 'Add Category',
+                ),
+                ElevatedButton.icon(
+                  onPressed: _openAddProductDialog,
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('Add'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: c.primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16)),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+
+            // Stats
+            Row(
+              children: <Widget>[
+                _StatCard(
+                    label: 'Products',
+                    value: '${state.products.length}',
+                    color: c.primary),
+                const SizedBox(width: 8),
+                _StatCard(
+                    label: 'Low Stock',
+                    value: '${state.lowStockCount}',
+                    color: c.warning),
+                const SizedBox(width: 8),
+                _StatCard(
+                  label: 'Value',
+                  value: state.totalValue >= 100000
+                      ? '₱${(state.totalValue / 1000).toStringAsFixed(1)}k'
+                      : '₱${state.totalValue.toStringAsFixed(0)}',
+                  color: c.info,
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+
+            // Low-stock banner
+            if (state.lowStockCount > 0)
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: c.warning.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: c.warning.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  children: <Widget>[
+                    Icon(Icons.warning_amber_rounded,
+                        color: c.warning, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '${state.lowStockCount} product${state.lowStockCount == 1 ? '' : 's'} below restock threshold',
+                        style: TextStyle(color: c.warning, fontSize: 13),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 10),
+            if (state.lowStockCount > 0) const SizedBox(height: 10),
 
-          // Stats
-          Row(
-            children: <Widget>[
-              _StatCard(
-                  label: 'Products',
-                  value: '${state.products.length}',
-                  color: c.primary),
-              const SizedBox(width: 8),
-              _StatCard(
-                  label: 'Low Stock',
-                  value: '${state.lowStockCount}',
-                  color: c.warning),
-              const SizedBox(width: 8),
-              _StatCard(
-                label: 'Value',
-                value: state.totalValue >= 1000
-                    ? 'PHP ${(state.totalValue / 1000).toStringAsFixed(1)}k'
-                    : 'PHP ${state.totalValue.toStringAsFixed(0)}',
-                color: c.info,
+            // Search + category filter
+            TextField(
+              onChanged: (String v) =>
+                  ref.read(inventoryProvider.notifier).setSearch(v),
+              decoration: const InputDecoration(
+                prefixIcon: Icon(Icons.search),
+                hintText: 'Search product...',
               ),
-            ],
-          ),
-          const SizedBox(height: 10),
-
-          // Low-stock banner
-          if (state.lowStockCount > 0)
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: c.warning.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(14),
-                border:
-                    Border.all(color: c.warning.withValues(alpha: 0.3)),
-              ),
-              child: Row(
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 38,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
                 children: <Widget>[
-                  Icon(Icons.warning_amber_rounded,
-                      color: c.warning, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      '${state.lowStockCount} product${state.lowStockCount == 1 ? '' : 's'} below restock threshold',
-                      style:
-                          TextStyle(color: c.warning, fontSize: 13),
-                    ),
+                  _CategoryChip(
+                    label: 'All',
+                    selected: state.selectedCategory == null,
+                    onTap: () =>
+                        ref.read(inventoryProvider.notifier).setCategory(null),
                   ),
+                  const SizedBox(width: 6),
+                  ...state.categories.map((Category cat) => Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: _CategoryChip(
+                          label: cat.name,
+                          selected: state.selectedCategory == cat.categoryId,
+                          onTap: () => ref
+                              .read(inventoryProvider.notifier)
+                              .setCategory(cat.categoryId),
+                        ),
+                      )),
                 ],
               ),
             ),
-          if (state.lowStockCount > 0) const SizedBox(height: 10),
+            const SizedBox(height: 10),
 
-          // Search + category filter
-          TextField(
-            onChanged: (String v) =>
-                ref.read(inventoryProvider.notifier).setSearch(v),
-            decoration: const InputDecoration(
-              prefixIcon: Icon(Icons.search),
-              hintText: 'Search product...',
-            ),
-          ),
-          const SizedBox(height: 8),
-          SizedBox(
-            height: 38,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              children: <Widget>[
-                _CategoryChip(
-                  label: 'All',
-                  selected: state.selectedCategory == null,
-                  onTap: () => ref
-                      .read(inventoryProvider.notifier)
-                      .setCategory(null),
+            // Product list
+            if (filtered.isEmpty)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 30),
+                  child: Text('No products found',
+                      style: TextStyle(color: c.textSecondary)),
                 ),
-                const SizedBox(width: 6),
-                ...state.categories.map((Category cat) => Padding(
-                      padding: const EdgeInsets.only(right: 6),
-                      child: _CategoryChip(
-                        label: cat.name,
-                        selected:
-                            state.selectedCategory == cat.categoryId,
-                        onTap: () => ref
-                            .read(inventoryProvider.notifier)
-                            .setCategory(cat.categoryId),
+              )
+            else
+              ...filtered.map((Product p) {
+                final bool low = p.isLowStock;
+                final bool hasSuggestion =
+                    p.suggestedPrice != null && p.suggestedPrice! > p.unitPrice;
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: low
+                          ? c.warning.withValues(alpha: 0.2)
+                          : c.primary.withValues(alpha: 0.18),
+                      child: Icon(
+                        low
+                            ? Icons.warning_amber_rounded
+                            : Icons.inventory_2_outlined,
+                        color: low ? c.warning : c.primary,
+                        size: 20,
                       ),
-                    )),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
-
-          // Product list
-          if (filtered.isEmpty)
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 30),
-                child: Text('No products found',
-                    style: TextStyle(color: c.textSecondary)),
-              ),
-            )
-          else
-            ...filtered.map((Product p) {
-              final bool low = p.isLowStock;
-              final bool hasSuggestion =
-                  p.suggestedPrice != null &&
-                  p.suggestedPrice! > p.unitPrice;
-              return Card(
-                margin: const EdgeInsets.only(bottom: 8),
-                child: ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: low
-                        ? c.warning.withValues(alpha: 0.2)
-                        : c.primary.withValues(alpha: 0.18),
-                    child: Icon(
-                      low
-                          ? Icons.warning_amber_rounded
-                          : Icons.inventory_2_outlined,
-                      color: low ? c.warning : c.primary,
-                      size: 20,
                     ),
-                  ),
-                  title: Text(p.name),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      const SizedBox(height: 2),
-                      Text(
-                          '${p.categoryName ?? 'Uncategorized'} | Stock: ${p.stockQty}'),
-                      Text(
-                        'PHP ${p.unitPrice.toStringAsFixed(2)}',
-                        style: TextStyle(
-                            color: c.primary,
-                            fontWeight: FontWeight.w700),
-                      ),
-                      if (hasSuggestion)
+                    title: Text(p.name),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        const SizedBox(height: 2),
                         Text(
-                          'Suggested: PHP ${p.suggestedPrice!.toStringAsFixed(2)}',
-                          style:
-                              TextStyle(color: c.warning, fontSize: 12),
+                            '${p.categoryName ?? 'Uncategorized'} | Stock: ${p.stockQty}'),
+                        Text(
+                          'PHP ${p.unitPrice.toStringAsFixed(2)}',
+                          style: TextStyle(
+                              color: c.primary, fontWeight: FontWeight.w700),
                         ),
-                    ],
-                  ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      if (hasSuggestion)
-                        TextButton(
+                        if (hasSuggestion)
+                          Text(
+                            'Suggested: PHP ${p.suggestedPrice!.toStringAsFixed(2)}',
+                            style: TextStyle(color: c.warning, fontSize: 12),
+                          ),
+                      ],
+                    ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        if (hasSuggestion)
+                          TextButton(
+                            onPressed: () async {
+                              await ref
+                                  .read(inventoryProvider.notifier)
+                                  .acceptSuggestedPrice(
+                                      p.productId, p.suggestedPrice!);
+                              _showMessage('Price updated');
+                            },
+                            child: const Text('Accept',
+                                style: TextStyle(fontSize: 12)),
+                          ),
+                        IconButton(
+                          icon: Icon(Icons.add_box_outlined,
+                              size: 18, color: c.info),
+                          tooltip: 'Add Stock',
+                          onPressed: () => _openQuickStockDialog(p),
+                        ),
+                        IconButton(
+                          icon: Icon(Icons.edit_outlined,
+                              size: 18, color: c.textSecondary),
+                          onPressed: () => _openEditDialog(p),
+                        ),
+                        IconButton(
+                          icon: Icon(Icons.delete_outline,
+                              size: 18, color: c.error),
                           onPressed: () async {
-                            await ref
-                                .read(inventoryProvider.notifier)
-                                .acceptSuggestedPrice(
-                                    p.productId, p.suggestedPrice!);
-                            _showMessage('Price updated');
+                            final bool? ok = await showDialog<bool>(
+                              context: context,
+                              builder: (_) => AlertDialog(
+                                title: const Text('Delete product?'),
+                                content:
+                                    Text('Remove "${p.name}" from inventory?'),
+                                actions: <Widget>[
+                                  TextButton(
+                                      onPressed: () =>
+                                          Navigator.pop(context, false),
+                                      child: const Text('Cancel')),
+                                  ElevatedButton(
+                                      style: ElevatedButton.styleFrom(
+                                          backgroundColor: c.error,
+                                          foregroundColor: Colors.white),
+                                      onPressed: () =>
+                                          Navigator.pop(context, true),
+                                      child: const Text('Delete')),
+                                ],
+                              ),
+                            );
+                            if (ok == true) {
+                              await ref
+                                  .read(inventoryProvider.notifier)
+                                  .deleteProduct(p.productId);
+                              _showMessage('Product removed');
+                            }
                           },
-                          child: const Text('Accept',
-                              style: TextStyle(fontSize: 12)),
                         ),
-                      IconButton(
-                        icon: Icon(Icons.edit_outlined,
-                            size: 18, color: c.textSecondary),
-                        onPressed: () => _openEditDialog(p),
-                      ),
-                      IconButton(
-                        icon: Icon(Icons.delete_outline,
-                            size: 18, color: c.error),
-                        onPressed: () async {
-                          final bool? ok = await showDialog<bool>(
-                            context: context,
-                            builder: (_) => AlertDialog(
-                              title: const Text('Delete product?'),
-                              content: Text(
-                                  'Remove "${p.name}" from inventory?'),
-                              actions: <Widget>[
-                                TextButton(
-                                    onPressed: () =>
-                                        Navigator.pop(context, false),
-                                    child: const Text('Cancel')),
-                                ElevatedButton(
-                                    style: ElevatedButton.styleFrom(
-                                        backgroundColor: c.error,
-                                        foregroundColor: Colors.white),
-                                    onPressed: () =>
-                                        Navigator.pop(context, true),
-                                    child: const Text('Delete')),
-                              ],
-                            ),
-                          );
-                          if (ok == true) {
-                            await ref
-                                .read(inventoryProvider.notifier)
-                                .deleteProduct(p.productId);
-                            _showMessage('Product removed');
-                          }
-                        },
-                      ),
-                    ],
+                      ],
+                    ),
+                    isThreeLine: true,
                   ),
-                  isThreeLine: true,
-                ),
-              );
-            }),
-        ],
+                );
+              }),
+          ],
         ),
       ),
     );
@@ -677,8 +717,7 @@ class _StatCard extends StatelessWidget {
             Text(value,
                 style: TextStyle(color: color, fontWeight: FontWeight.w800)),
             const SizedBox(height: 2),
-            Text(label,
-                style: TextStyle(color: c.textSecondary, fontSize: 11)),
+            Text(label, style: TextStyle(color: c.textSecondary, fontSize: 11)),
           ],
         ),
       ),

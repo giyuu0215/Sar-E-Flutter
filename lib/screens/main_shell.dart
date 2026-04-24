@@ -5,6 +5,7 @@ import '../application/auth_provider.dart';
 import '../application/analytics_provider.dart';
 import '../application/inventory_provider.dart';
 import '../application/listahan_provider.dart';
+import '../application/locale_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/liquid_background.dart';
 import 'analytics_screen.dart';
@@ -13,6 +14,7 @@ import 'listahan_screen.dart';
 import 'notifications_screen.dart';
 import 'profile_screen.dart';
 import 'scanner_screen.dart';
+import 'settings_screen.dart';
 import 'transactions_screen.dart';
 
 class MainShell extends ConsumerStatefulWidget {
@@ -38,30 +40,34 @@ class _MainShellState extends ConsumerState<MainShell> {
 
     final AuthState auth = ref.watch(authProvider).value ?? const AuthState();
     final bool isOwner = auth.user?.role == 'owner';
+    final AppLocale locale = ref.watch(localeProvider);
 
     // Calculate total alerts
     final invAsync = ref.watch(inventoryProvider);
     final listAsync = ref.watch(listahanProvider);
-    final int lowStock = invAsync.value?.products.where((p) => p.isLowStock).length ?? 0;
-    final int overdue = listAsync.value?.entries.where((e) => e.isOverdue).length ?? 0;
+    final int lowStock =
+        invAsync.value?.products.where((p) => p.isLowStock).length ?? 0;
+    final int overdue =
+        listAsync.value?.entries.where((e) => e.isOverdue).length ?? 0;
     final bool hasAlerts = (lowStock + overdue) > 0;
 
-    final List<Widget> tabs = isOwner 
-      ? <Widget>[
-          const ScannerScreen(),
-          const ListahanScreen(),
-          const InventoryScreen(),
-          AnalyticsScreen(
-            onOpenTransactions: () {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => const TransactionsScreen()),
-              );
-            },
-          ),
-        ]
-      : <Widget>[
-          const ScannerScreen(), // Cashiers ONLY see POS
-        ];
+    final List<Widget> tabs = isOwner
+        ? <Widget>[
+            const ScannerScreen(),
+            const ListahanScreen(),
+            const InventoryScreen(),
+            AnalyticsScreen(
+              onOpenTransactions: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                      builder: (_) => const TransactionsScreen()),
+                );
+              },
+            ),
+          ]
+        : <Widget>[
+            const ScannerScreen(), // Cashiers ONLY see POS
+          ];
 
     return Scaffold(
       appBar: AppBar(
@@ -84,7 +90,17 @@ class _MainShellState extends ConsumerState<MainShell> {
               ),
             ),
           _HeaderActionButton(
-            tooltip: 'Profile',
+            tooltip: 'Settings',
+            icon: Icons.settings_outlined,
+            iconColor: c.textSecondary,
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const SettingsScreen(),
+              ),
+            ),
+          ),
+          _HeaderActionButton(
+            tooltip: t(locale, 'profile'),
             icon: Icons.account_circle_outlined,
             iconColor: c.primary,
             onTap: () => Navigator.of(context).push(
@@ -98,56 +114,52 @@ class _MainShellState extends ConsumerState<MainShell> {
       ),
       body: LiquidBackground(
         child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 300),
-          switchInCurve: Curves.easeOutCubic,
-          switchOutCurve: Curves.easeInCubic,
+          duration: const Duration(milliseconds: 200),
+          switchInCurve: Curves.easeOut,
+          switchOutCurve: Curves.easeIn,
           transitionBuilder: (Widget child, Animation<double> animation) {
-            final Animation<Offset> offset = Tween<Offset>(
-              begin: const Offset(0.02, 0),
-              end: Offset.zero,
-            ).animate(animation);
             return FadeTransition(
               opacity: animation,
-              child: SlideTransition(position: offset, child: child),
+              child: child,
             );
           },
           child: KeyedSubtree(key: ValueKey<int>(_index), child: tabs[_index]),
         ),
       ),
-      bottomNavigationBar: isOwner 
-        ? NavigationBar(
-            selectedIndex: _index,
-            onDestinationSelected: (int value) {
+      bottomNavigationBar: isOwner
+          ? NavigationBar(
+              selectedIndex: _index,
+              onDestinationSelected: (int value) {
                 setState(() => _index = value);
                 // Force analytics to reload whenever the tab is opened
                 if (value == 3) {
                   ref.invalidate(analyticsProvider);
                 }
               },
-            destinations: const <NavigationDestination>[
-              NavigationDestination(
-                icon: Icon(Icons.point_of_sale_outlined),
-                selectedIcon: Icon(Icons.point_of_sale),
-                label: 'POS',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.menu_book_outlined),
-                selectedIcon: Icon(Icons.menu_book),
-                label: 'Listahan',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.inventory_2_outlined),
-                selectedIcon: Icon(Icons.inventory_2),
-                label: 'Inventory',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.analytics_outlined),
-                selectedIcon: Icon(Icons.analytics),
-                label: 'Analytics',
-              ),
-            ],
-          )
-        : null, // Cashier has no bottom nav since they only have 1 screen
+              destinations: <NavigationDestination>[
+                NavigationDestination(
+                  icon: const Icon(Icons.point_of_sale_outlined),
+                  selectedIcon: const Icon(Icons.point_of_sale),
+                  label: t(locale, 'tab_pos'),
+                ),
+                NavigationDestination(
+                  icon: const Icon(Icons.menu_book_outlined),
+                  selectedIcon: const Icon(Icons.menu_book),
+                  label: t(locale, 'tab_listahan'),
+                ),
+                NavigationDestination(
+                  icon: const Icon(Icons.inventory_2_outlined),
+                  selectedIcon: const Icon(Icons.inventory_2),
+                  label: t(locale, 'tab_inventory'),
+                ),
+                NavigationDestination(
+                  icon: const Icon(Icons.analytics_outlined),
+                  selectedIcon: const Icon(Icons.analytics),
+                  label: t(locale, 'tab_analytics'),
+                ),
+              ],
+            )
+          : null, // Cashier has no bottom nav since they only have 1 screen
     );
   }
 }

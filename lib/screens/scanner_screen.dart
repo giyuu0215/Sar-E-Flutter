@@ -57,9 +57,15 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
 
     // Static defaults
-    final List<String> staticKeys = <String>['qr_gcash', 'qr_maya', 'qr_maribank'];
+    final List<String> staticKeys = <String>[
+      'qr_gcash',
+      'qr_maya',
+      'qr_maribank'
+    ];
     final Map<String, String> staticLabels = <String, String>{
-      'qr_gcash': 'GCash', 'qr_maya': 'Maya', 'qr_maribank': 'MariBank',
+      'qr_gcash': 'GCash',
+      'qr_maya': 'Maya',
+      'qr_maribank': 'MariBank',
     };
     // Dynamic extras
     final int extraCount = prefs.getInt('qr_extra_count') ?? 0;
@@ -96,8 +102,9 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
           builder: (BuildContext ctx2, StateSetter setS) {
             final double total = ref.read(cartProvider).total;
             final double tendered = double.tryParse(cashCtrl.text) ?? 0;
-            final double change =
-                method == 'cash' ? (tendered - total).clamp(0, double.infinity) : 0;
+            final double change = method == 'cash'
+                ? (tendered - total).clamp(0, double.infinity)
+                : 0;
 
             return AlertDialog(
               title: const Text('Checkout'),
@@ -212,13 +219,13 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                         const SizedBox(height: 8),
                         // Display selected regenerated QR
                         Builder(builder: (BuildContext _) {
-                          final Map<String, String?>? entry =
-                              qrEntries.cast<Map<String, String?>?>()
-                                  .firstWhere(
-                                    (Map<String, String?>? e) =>
-                                        e!['key'] == selectedQrKey,
-                                    orElse: () => qrEntries.first,
-                                  );
+                          final Map<String, String?>? entry = qrEntries
+                              .cast<Map<String, String?>?>()
+                              .firstWhere(
+                                (Map<String, String?>? e) =>
+                                    e!['key'] == selectedQrKey,
+                                orElse: () => qrEntries.first,
+                              );
                           final String? rawData = entry?['data'];
                           if (rawData == null) return const SizedBox.shrink();
 
@@ -251,8 +258,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                                   color: c.primary.withValues(alpha: 0.08),
                                   borderRadius: BorderRadius.circular(14),
                                   border: Border.all(
-                                      color: c.primary
-                                          .withValues(alpha: 0.25)),
+                                      color: c.primary.withValues(alpha: 0.25)),
                                 ),
                                 child: SizedBox(
                                   width: 200,
@@ -267,8 +273,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                                       color: c.primaryDark,
                                     ),
                                     dataModuleStyle: QrDataModuleStyle(
-                                      dataModuleShape:
-                                          QrDataModuleShape.square,
+                                      dataModuleShape: QrDataModuleShape.square,
                                       color: c.primaryDark,
                                     ),
                                   ),
@@ -286,7 +291,6 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                       ],
                       const SizedBox(height: 8),
                     ],
-
 
                     const SizedBox(height: 12),
 
@@ -312,8 +316,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                   onPressed: () async {
                     // ── Validate BEFORE closing dialog ──
                     if (method == 'cash') {
-                      final double t =
-                          double.tryParse(cashCtrl.text) ?? 0;
+                      final double t = double.tryParse(cashCtrl.text) ?? 0;
                       if (t < total) {
                         setS(() => cashError =
                             'Enter at least ₱${total.toStringAsFixed(2)}');
@@ -381,8 +384,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
         (data['payment_method'] as String? ?? 'cash').toUpperCase();
     final double total = (data['total'] as num?)?.toDouble() ?? 0;
     final double changeDue = ref.read(cartProvider).changeDue;
-    final String dateStr =
-        '${receipt.timestamp.year}-'
+    final String dateStr = '${receipt.timestamp.year}-'
         '${receipt.timestamp.month.toString().padLeft(2, '0')}-'
         '${receipt.timestamp.day.toString().padLeft(2, '0')} '
         '${receipt.timestamp.hour.toString().padLeft(2, '0')}:'
@@ -402,12 +404,12 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                 // ── Header ──
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 20, vertical: 16),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                   decoration: BoxDecoration(
                     color: c.primary,
-                    borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(28)),
+                    borderRadius:
+                        const BorderRadius.vertical(top: Radius.circular(28)),
                   ),
                   child: Column(
                     children: <Widget>[
@@ -448,15 +450,12 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                         ...items.map((dynamic it) {
                           final Map<String, dynamic> item =
                               it as Map<String, dynamic>;
-                          final String name =
-                              item['name'] as String? ?? '-';
-                          final int qty =
-                              (item['qty'] as num?)?.toInt() ?? 1;
+                          final String name = item['name'] as String? ?? '-';
+                          final int qty = (item['qty'] as num?)?.toInt() ?? 1;
                           final double price =
                               (item['price'] as num?)?.toDouble() ?? 0;
                           return Padding(
-                            padding:
-                                const EdgeInsets.symmetric(vertical: 4),
+                            padding: const EdgeInsets.symmetric(vertical: 4),
                             child: Row(
                               children: <Widget>[
                                 Expanded(
@@ -486,8 +485,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                                 style: TextStyle(fontSize: 12)),
                             Text(payMethod,
                                 style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600)),
+                                    fontSize: 12, fontWeight: FontWeight.w600)),
                           ],
                         ),
                         const SizedBox(height: 4),
@@ -514,8 +512,8 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: <Widget>[
                               Text('Change',
-                                  style: TextStyle(
-                                      color: c.info, fontSize: 13)),
+                                  style:
+                                      TextStyle(color: c.info, fontSize: 13)),
                               Text(
                                 '₱${changeDue.toStringAsFixed(2)}',
                                 style: TextStyle(
@@ -551,8 +549,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                                   color: c.primaryDark,
                                 ),
                                 dataModuleStyle: QrDataModuleStyle(
-                                  dataModuleShape:
-                                      QrDataModuleShape.square,
+                                  dataModuleShape: QrDataModuleShape.square,
                                   color: c.primaryDark,
                                 ),
                               ),
@@ -563,8 +560,8 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                         Center(
                           child: Text(
                             'Scan to verify receipt',
-                            style: TextStyle(
-                                color: c.textTertiary, fontSize: 11),
+                            style:
+                                TextStyle(color: c.textTertiary, fontSize: 11),
                           ),
                         ),
                         const SizedBox(height: 16),
@@ -583,7 +580,8 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                       SizedBox(
                         width: double.infinity,
                         child: OutlinedButton.icon(
-                          onPressed: () => _shareReceiptPdf(receipt, items, dateStr),
+                          onPressed: () =>
+                              _shareReceiptPdf(receipt, items, dateStr),
                           icon: const Icon(Icons.share_outlined, size: 18),
                           label: const Text('Share PDF'),
                           style: OutlinedButton.styleFrom(
@@ -618,7 +616,8 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
     );
   }
 
-  Future<void> _shareReceiptPdf(Receipt receipt, List<dynamic> items, String dateStr) async {
+  Future<void> _shareReceiptPdf(
+      Receipt receipt, List<dynamic> items, String dateStr) async {
     final pw.Document doc = pw.Document();
 
     doc.addPage(
@@ -639,7 +638,8 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                     style: const pw.TextStyle(fontSize: 12)),
               ),
               pw.SizedBox(height: 10),
-              pw.Text('Receipt #: ${receipt.receiptId.substring(0, 8).toUpperCase()}'),
+              pw.Text(
+                  'Receipt #: ${receipt.receiptId.substring(0, 8).toUpperCase()}'),
               pw.Text('Date: $dateStr'),
               pw.Divider(),
               ...items.map((dynamic it) {
@@ -701,8 +701,12 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
       if (p.stockQty <= 0) {
         _showMessage('"${p.name}" is out of stock');
       } else {
-        notifier.addProduct(p);
-        _showMessage('Added: ${p.name}');
+        final String? warn = notifier.addProduct(p);
+        if (warn != null) {
+          _showMessage(warn);
+        } else {
+          _showMessage('Added: ${p.name}');
+        }
       }
     }
     notifier.search(''); // clear search results
@@ -732,8 +736,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                 Row(children: <Widget>[
                   const Icon(Icons.point_of_sale_outlined),
                   const SizedBox(width: 8),
-                  Text('POS',
-                      style: Theme.of(context).textTheme.titleLarge),
+                  Text('POS', style: Theme.of(context).textTheme.titleLarge),
                   const Spacer(),
                   // Enlarged always-visible scan button
                   ElevatedButton.icon(
@@ -751,10 +754,8 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                   ),
                   const SizedBox(width: 6),
                   IconButton.filledTonal(
-                    onPressed: () =>
-                        setState(() => _showSearch = !_showSearch),
-                    icon: Icon(
-                        _showSearch ? Icons.close : Icons.search,
+                    onPressed: () => setState(() => _showSearch = !_showSearch),
+                    icon: Icon(_showSearch ? Icons.close : Icons.search,
                         size: 18),
                     tooltip: 'Search products',
                   ),
@@ -794,16 +795,15 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                                         fontWeight: FontWeight.w700),
                                   ),
                                   onTap: () {
-                                    ref
+                                    final String? warn = ref
                                         .read(cartProvider.notifier)
                                         .addProduct(p);
+                                    if (warn != null) _showMessage(warn);
                                     setState(() {
                                       _showSearch = false;
                                       _searchCtrl.clear();
                                     });
-                                    ref
-                                        .read(cartProvider.notifier)
-                                        .search('');
+                                    ref.read(cartProvider.notifier).search('');
                                   },
                                 ))
                             .toList(),
@@ -868,8 +868,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                       const SizedBox(height: 16),
                       Text(
                         'or use 🔍 Search above',
-                        style: TextStyle(
-                            color: c.textTertiary, fontSize: 12),
+                        style: TextStyle(color: c.textTertiary, fontSize: 12),
                       ),
                     ]),
                   )
@@ -885,8 +884,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                         child: Row(children: <Widget>[
                           Expanded(
                             child: Column(
-                              crossAxisAlignment:
-                                  CrossAxisAlignment.start,
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: <Widget>[
                                 Text(item.product.name,
                                     style: const TextStyle(
@@ -894,76 +892,65 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                                 Text(
                                   '₱${item.product.unitPrice.toStringAsFixed(2)} each',
                                   style: TextStyle(
-                                      color: c.textSecondary,
-                                      fontSize: 12),
+                                      color: c.textSecondary, fontSize: 12),
                                 ),
                               ],
                             ),
                           ),
                           Row(children: <Widget>[
                             IconButton(
-                              onPressed: () => ref
-                                  .read(cartProvider.notifier)
-                                  .changeQty(
-                                      item.product.productId, -1),
-                              icon: const Icon(
-                                  Icons.remove_circle_outline),
+                              onPressed: () {
+                                final String? warn = ref
+                                    .read(cartProvider.notifier)
+                                    .changeQty(item.product.productId, -1);
+                                if (warn != null) _showMessage(warn);
+                              },
+                              icon: const Icon(Icons.remove_circle_outline),
                               iconSize: 20,
                             ),
                             // Tap qty number to edit manually
                             GestureDetector(
                               onTap: () async {
                                 final TextEditingController qtyCtrl =
-                                    TextEditingController(
-                                        text: '${item.qty}');
-                                final String? result =
-                                    await showDialog<String>(
+                                    TextEditingController(text: '${item.qty}');
+                                final String? result = await showDialog<String>(
                                   context: context,
-                                  builder: (BuildContext dCtx) =>
-                                      AlertDialog(
+                                  builder: (BuildContext dCtx) => AlertDialog(
                                     title: Text(item.product.name),
                                     content: TextField(
                                       controller: qtyCtrl,
                                       autofocus: true,
-                                      keyboardType:
-                                          TextInputType.number,
+                                      keyboardType: TextInputType.number,
                                       inputFormatters: <TextInputFormatter>[
-                                        FilteringTextInputFormatter
-                                            .digitsOnly,
+                                        FilteringTextInputFormatter.digitsOnly,
                                       ],
-                                      decoration:
-                                          const InputDecoration(
-                                              labelText: 'Quantity'),
+                                      decoration: const InputDecoration(
+                                          labelText: 'Quantity'),
                                     ),
                                     actions: <Widget>[
                                       TextButton(
-                                          onPressed: () =>
-                                              Navigator.pop(dCtx),
+                                          onPressed: () => Navigator.pop(dCtx),
                                           child: const Text('Cancel')),
                                       ElevatedButton(
                                           onPressed: () =>
-                                              Navigator.pop(
-                                                  dCtx, qtyCtrl.text),
+                                              Navigator.pop(dCtx, qtyCtrl.text),
                                           child: const Text('Set')),
                                     ],
                                   ),
                                 );
                                 if (result != null) {
-                                  final int? newQty =
-                                      int.tryParse(result);
+                                  final int? newQty = int.tryParse(result);
                                   if (newQty != null && newQty > 0) {
-                                    final int delta =
-                                        newQty - item.qty;
-                                    ref
+                                    final int delta = newQty - item.qty;
+                                    final String? warn = ref
                                         .read(cartProvider.notifier)
                                         .changeQty(
-                                            item.product.productId,
-                                            delta);
+                                            item.product.productId, delta);
+                                    if (warn != null) _showMessage(warn);
                                   } else if (newQty == 0) {
                                     ref
                                         .read(cartProvider.notifier)
-                                        .removeItem(
-                                            item.product.productId);
+                                        .removeItem(item.product.productId);
                                   }
                                 }
                               },
@@ -972,10 +959,8 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                                     horizontal: 10, vertical: 4),
                                 decoration: BoxDecoration(
                                   color: c.surfaceMuted,
-                                  borderRadius:
-                                      BorderRadius.circular(8),
-                                  border:
-                                      Border.all(color: c.border),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: c.border),
                                 ),
                                 child: Text(
                                   '${item.qty}',
@@ -986,12 +971,13 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                               ),
                             ),
                             IconButton(
-                              onPressed: () => ref
-                                  .read(cartProvider.notifier)
-                                  .changeQty(
-                                      item.product.productId, 1),
-                              icon: const Icon(
-                                  Icons.add_circle_outline),
+                              onPressed: () {
+                                final String? warn = ref
+                                    .read(cartProvider.notifier)
+                                    .changeQty(item.product.productId, 1);
+                                if (warn != null) _showMessage(warn);
+                              },
+                              icon: const Icon(Icons.add_circle_outline),
                               iconSize: 20,
                             ),
                           ]),
@@ -1035,8 +1021,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
                 Text('Total',
-                    style: TextStyle(
-                        color: c.textSecondary, fontSize: 11)),
+                    style: TextStyle(color: c.textSecondary, fontSize: 11)),
                 Text(
                   '₱${cart.total.toStringAsFixed(2)}',
                   style: TextStyle(
@@ -1048,8 +1033,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                 const SizedBox(height: 2),
                 Text(
                   '${cart.items.length} item${cart.items.length == 1 ? '' : 's'}',
-                  style: TextStyle(
-                      color: c.textSecondary, fontSize: 10),
+                  style: TextStyle(color: c.textSecondary, fontSize: 10),
                 ),
               ],
             ),
@@ -1057,8 +1041,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
             // Clear
             if (!cart.isEmpty)
               TextButton(
-                onPressed:
-                    ref.read(cartProvider.notifier).clearCart,
+                onPressed: ref.read(cartProvider.notifier).clearCart,
                 style: TextButton.styleFrom(
                   visualDensity: VisualDensity.compact,
                   padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -1071,13 +1054,11 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
             SizedBox(
               height: 44,
               child: ElevatedButton(
-                onPressed:
-                    cart.isProcessing ? null : _showCheckoutDialog,
+                onPressed: cart.isProcessing ? null : _showCheckoutDialog,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: c.primary,
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12)),
                   elevation: 0,
@@ -1091,12 +1072,10 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                     : const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: <Widget>[
-                          Icon(Icons.shopping_cart_checkout,
-                              size: 18),
+                          Icon(Icons.shopping_cart_checkout, size: 18),
                           SizedBox(width: 8),
                           Text('Checkout',
-                              style: TextStyle(
-                                  fontWeight: FontWeight.w700)),
+                              style: TextStyle(fontWeight: FontWeight.w700)),
                         ],
                       ),
               ),
@@ -1132,24 +1111,19 @@ class _PaymentChip extends StatelessWidget {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
-          color: selected
-              ? c.primary.withValues(alpha: 0.15)
-              : c.surfaceMuted,
+          color: selected ? c.primary.withValues(alpha: 0.15) : c.surfaceMuted,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-              color: selected ? c.primary : c.border,
-              width: selected ? 2 : 1),
+              color: selected ? c.primary : c.border, width: selected ? 2 : 1),
         ),
         child: Column(children: <Widget>[
-          Icon(icon,
-              color: selected ? c.primary : c.textSecondary),
+          Icon(icon, color: selected ? c.primary : c.textSecondary),
           const SizedBox(height: 4),
           Text(
             label,
             style: TextStyle(
               color: selected ? c.primary : c.textSecondary,
-              fontWeight:
-                  selected ? FontWeight.w700 : FontWeight.w500,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
               fontSize: 12,
             ),
           ),

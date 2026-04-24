@@ -31,8 +31,7 @@ class CreditEntry {
   final String? customerPhone;
 
   double get remaining => amount - amountPaid;
-  bool get isOverdue =>
-      dueDate.isBefore(DateTime.now()) && status != 'settled';
+  bool get isOverdue => dueDate.isBefore(DateTime.now()) && status != 'settled';
   bool get isSettled => status == 'settled';
 
   CreditEntry copyWith({

@@ -21,9 +21,11 @@ String hashPin(String pin) {
 }
 
 class GoogleLinkResult {
-  const GoogleLinkResult({required this.storeId, this.existingStoreName});
+  const GoogleLinkResult(
+      {required this.storeId, this.existingStoreName, this.cloudPinHash});
   final String storeId;
   final String? existingStoreName;
+  final String? cloudPinHash;
   bool get isExistingStore => existingStoreName != null;
 }
 
@@ -89,8 +91,10 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     String? storeNameHint;
     if (hasOwner) {
       final List<UserCredential> users = await _dao.getAllUsers();
-      storeNameHint =
-          users.where((UserCredential u) => u.role == 'owner').firstOrNull?.storeName;
+      storeNameHint = users
+          .where((UserCredential u) => u.role == 'owner')
+          .firstOrNull
+          ?.storeName;
     }
 
     if (!hasOwner || storeId == null) {
@@ -138,6 +142,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       await prefs.remove('isOfflineMode');
 
       String? existingStoreName;
+      String? cloudPinHash;
       try {
         final DocumentSnapshot<Map<String, dynamic>> doc =
             await FirebaseFirestore.instance
@@ -148,6 +153,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
                 .get();
         if (doc.exists) {
           existingStoreName = doc.data()?['storeName'] as String?;
+          cloudPinHash = doc.data()?['pinHash'] as String?;
         }
       } catch (_) {}
 
@@ -157,7 +163,10 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
         isOfflineMode: false,
       ));
       return GoogleLinkResult(
-          storeId: storeId, existingStoreName: existingStoreName);
+        storeId: storeId,
+        existingStoreName: existingStoreName,
+        cloudPinHash: cloudPinHash,
+      );
     } catch (e) {
       state = AsyncData<AuthState>(state.value!.copyWith(
         isLoading: false,
@@ -217,9 +226,9 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
           .doc('info')
           .set(<String, dynamic>{
         'storeName': trimmedName,
+        'pinHash': user.pinHash,
         'createdAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true))
-          .catchError((_) {});
+      }, SetOptions(merge: true)).catchError((_) {});
     }
 
     state = AsyncData<AuthState>(current.copyWith(
@@ -352,9 +361,82 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
   Future<void> changePin(String newPin) async {
     final UserCredential? user = state.value?.user;
     if (user == null) return;
-    final UserCredential updated = user.copyWith(pinHash: hashPin(newPin));
+    final String newHash = hashPin(newPin);
+    final UserCredential updated = user.copyWith(pinHash: newHash);
     await _dao.update(updated);
     state = AsyncData<AuthState>(state.value!.copyWith(user: updated));
+
+    // Sync to Firestore so returning devices pick up the new PIN
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    final String? storeId = prefs.getString('storeId');
+    final bool isOffline = prefs.getBool('isOfflineMode') ?? false;
+    if (!isOffline && storeId != null) {
+      FirebaseFirestore.instance
+          .collection('stores')
+          .doc(storeId)
+          .collection('profile')
+          .doc('info')
+          .update(<String, dynamic>{'pinHash': newHash}).catchError((_) {});
+    }
+  }
+
+  /// Retrieve the cloud-stored PIN hash for an existing store.
+  /// Returns null if no hash is found (legacy stores).
+  Future<String?> getCloudPinHash() async {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    final String? storeId = prefs.getString('storeId');
+    if (storeId == null) return null;
+    try {
+      final DocumentSnapshot<Map<String, dynamic>> doc = await FirebaseFirestore
+          .instance
+          .collection('stores')
+          .doc(storeId)
+          .collection('profile')
+          .doc('info')
+          .get();
+      return doc.data()?['pinHash'] as String?;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Reset PIN during setup when user forgot their PIN.
+  /// Since they're already authenticated via Google, we trust them.
+  Future<bool> resetPinFromSetup(String newPin, String storeName) async {
+    final AuthState current = state.value!;
+    if (current.storeId == null) return false;
+    if (newPin.length < 4) return false;
+
+    final String trimmedName =
+        storeName.trim().isEmpty ? 'My Store' : storeName.trim();
+    final String newHash = hashPin(newPin);
+    final UserCredential user = UserCredential(
+      userId: _uuid.v4(),
+      pinHash: newHash,
+      role: 'owner',
+      storeName: trimmedName,
+    );
+    await _dao.insert(user);
+
+    // Update Firestore
+    try {
+      await FirebaseFirestore.instance
+          .collection('stores')
+          .doc(current.storeId)
+          .collection('profile')
+          .doc('info')
+          .set(<String, dynamic>{
+        'storeName': trimmedName,
+        'pinHash': newHash,
+      }, SetOptions(merge: true));
+    } catch (_) {}
+
+    state = AsyncData<AuthState>(current.copyWith(
+      user: user,
+      isFirstRun: false,
+      storeNameHint: trimmedName,
+    ));
+    return true;
   }
 
   Future<void> addCashier(String pin) async {

@@ -21,10 +21,9 @@ class NotificationsScreen extends ConsumerWidget {
     final AsyncValue<InventoryState> invAsync = ref.watch(inventoryProvider);
     final AsyncValue<ListahanState> listAsync = ref.watch(listahanProvider);
 
-    final List<Product> lowStock = invAsync.value?.products
-            .where((Product p) => p.isLowStock)
-            .toList() ??
-        <Product>[];
+    final List<Product> lowStock =
+        invAsync.value?.products.where((Product p) => p.isLowStock).toList() ??
+            <Product>[];
 
     final List<CreditEntry> overdue = listAsync.value?.entries
             .where((CreditEntry e) => e.isOverdue)
@@ -45,8 +44,7 @@ class NotificationsScreen extends ConsumerWidget {
                   Icon(Icons.notifications_off_outlined,
                       size: 56, color: c.textTertiary),
                   const SizedBox(height: 12),
-                  Text('No alerts',
-                      style: TextStyle(color: c.textSecondary)),
+                  Text('No alerts', style: TextStyle(color: c.textSecondary)),
                 ],
               ),
             )
@@ -62,8 +60,7 @@ class NotificationsScreen extends ConsumerWidget {
                         margin: const EdgeInsets.only(bottom: 8),
                         child: ListTile(
                           leading: CircleAvatar(
-                            backgroundColor:
-                                c.warning.withValues(alpha: 0.15),
+                            backgroundColor: c.warning.withValues(alpha: 0.15),
                             child: Icon(Icons.warning_amber_rounded,
                                 color: c.warning),
                           ),
@@ -94,8 +91,7 @@ class NotificationsScreen extends ConsumerWidget {
                         margin: const EdgeInsets.only(bottom: 8),
                         child: ListTile(
                           leading: CircleAvatar(
-                            backgroundColor:
-                                c.error.withValues(alpha: 0.15),
+                            backgroundColor: c.error.withValues(alpha: 0.15),
                             child: Icon(Icons.credit_card_off_outlined,
                                 color: c.error),
                           ),
@@ -107,8 +103,7 @@ class NotificationsScreen extends ConsumerWidget {
                                   'PHP ${e.remaining.toStringAsFixed(2)} remaining'),
                               Text(
                                 'Due: ${DateFormat('MMM d, y').format(e.dueDate)}',
-                                style:
-                                    TextStyle(color: c.error, fontSize: 12),
+                                style: TextStyle(color: c.error, fontSize: 12),
                               ),
                             ],
                           ),
@@ -117,21 +112,23 @@ class NotificationsScreen extends ConsumerWidget {
                               // Re-using the SMS feature from listahan
                               final Uri smsLaunchUri = Uri(
                                 scheme: 'sms',
-                                path: '09123456789', // Would use e.customerPhone if we added it to customer table
+                                path:
+                                    '09123456789', // Would use e.customerPhone if we added it to customer table
                                 queryParameters: <String, String>{
                                   'body':
                                       'Hi ${e.customerName}, this is a gentle reminder regarding your overdue credit of PHP ${e.remaining.toStringAsFixed(2)} at ${ref.read(authProvider).value?.user?.storeName ?? 'our store'}. Please settle it as soon as possible.',
                                 },
                               );
-                              
+
                               try {
                                 // Ignore failure, just try to launch
                                 // ignore: deprecated_member_use
                                 launchUrl(smsLaunchUri);
                               } catch (_) {}
-                              
+
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Opening SMS app...')),
+                                const SnackBar(
+                                    content: Text('Opening SMS app...')),
                               );
                               Navigator.pop(context);
                             },
@@ -158,8 +155,7 @@ class _SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       label,
-      style: TextStyle(
-          color: color, fontWeight: FontWeight.w700, fontSize: 14),
+      style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 14),
     );
   }
 }

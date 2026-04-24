@@ -43,8 +43,7 @@ class _ListahanContentState extends ConsumerState<_ListahanContent> {
 
   Future<void> _openAddCreditDialog() async {
     Customer? selectedCustomer;
-    final TextEditingController customerSearchCtrl =
-        TextEditingController();
+    final TextEditingController customerSearchCtrl = TextEditingController();
     List<Customer> searchResults = List<Customer>.from(widget.state.customers);
     final TextEditingController itemsCtrl = TextEditingController();
     final TextEditingController amountCtrl = TextEditingController();
@@ -87,8 +86,7 @@ class _ListahanContentState extends ConsumerState<_ListahanContent> {
                         Container(
                           constraints: const BoxConstraints(maxHeight: 120),
                           decoration: BoxDecoration(
-                            border: Border.all(
-                                color: appColors(ctx).border),
+                            border: Border.all(color: appColors(ctx).border),
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: ListView.builder(
@@ -188,8 +186,7 @@ class _ListahanContentState extends ConsumerState<_ListahanContent> {
                       _showMessage('Please select a customer.');
                       return;
                     }
-                    final double amount =
-                        double.tryParse(amountCtrl.text) ?? 0;
+                    final double amount = double.tryParse(amountCtrl.text) ?? 0;
                     if (amount <= 0) {
                       _showMessage('Please enter a valid amount.');
                       return;
@@ -200,9 +197,7 @@ class _ListahanContentState extends ConsumerState<_ListahanContent> {
                         .where((String s) => s.isNotEmpty)
                         .toList();
                     Navigator.pop(ctx);
-                    await ref
-                        .read(listahanProvider.notifier)
-                        .addCreditEntry(
+                    await ref.read(listahanProvider.notifier).addCreditEntry(
                           customerId: selectedCustomer!.customerId,
                           items: items,
                           amount: amount,
@@ -228,6 +223,7 @@ class _ListahanContentState extends ConsumerState<_ListahanContent> {
     final TextEditingController mobileCtrl = TextEditingController();
     return showDialog<Customer>(
       context: ctx,
+      barrierDismissible: true,
       builder: (BuildContext ctx2) {
         return AlertDialog(
           title: const Text('New Customer'),
@@ -236,8 +232,7 @@ class _ListahanContentState extends ConsumerState<_ListahanContent> {
             children: <Widget>[
               TextField(
                   controller: nameCtrl,
-                  decoration:
-                      const InputDecoration(labelText: 'Name *')),
+                  decoration: const InputDecoration(labelText: 'Name *')),
               const SizedBox(height: 10),
               TextField(
                 controller: mobileCtrl,
@@ -256,15 +251,20 @@ class _ListahanContentState extends ConsumerState<_ListahanContent> {
             ElevatedButton(
               onPressed: () async {
                 if (nameCtrl.text.trim().isEmpty) return;
-                // Create the customer, then close ONLY this inner dialog.
-                final Customer c =
-                    await ref.read(listahanProvider.notifier).addCustomer(
-                          nameCtrl.text.trim(),
-                          mobile: mobileCtrl.text.trim().isEmpty
-                              ? null
-                              : mobileCtrl.text.trim(),
-                        );
-                if (ctx2.mounted) Navigator.pop(ctx2, c);
+                try {
+                  final Customer c = await ref
+                      .read(listahanProvider.notifier)
+                      .addCustomerSilent(
+                        nameCtrl.text.trim(),
+                        mobile: mobileCtrl.text.trim().isEmpty
+                            ? null
+                            : mobileCtrl.text.trim(),
+                      );
+                  if (ctx2.mounted) Navigator.pop(ctx2, c);
+                } catch (e) {
+                  if (ctx2.mounted) Navigator.pop(ctx2);
+                  _showMessage('Failed to create customer');
+                }
               },
               style: ElevatedButton.styleFrom(
                   backgroundColor: appColors(ctx2).primary,
@@ -292,8 +292,7 @@ class _ListahanContentState extends ConsumerState<_ListahanContent> {
               Text(
                 'Outstanding: PHP ${entry.remaining.toStringAsFixed(2)}',
                 style: TextStyle(
-                    color: appColors(ctx).primary,
-                    fontWeight: FontWeight.w700),
+                    color: appColors(ctx).primary, fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 12),
               TextField(
@@ -308,7 +307,8 @@ class _ListahanContentState extends ConsumerState<_ListahanContent> {
               const SizedBox(height: 10),
               TextField(
                 controller: notesCtrl,
-                decoration: const InputDecoration(labelText: 'Notes (optional)'),
+                decoration:
+                    const InputDecoration(labelText: 'Notes (optional)'),
               ),
             ],
           ),
@@ -318,19 +318,15 @@ class _ListahanContentState extends ConsumerState<_ListahanContent> {
                 child: const Text('Cancel')),
             ElevatedButton(
               onPressed: () async {
-                final double amount =
-                    double.tryParse(amountCtrl.text) ?? 0;
+                final double amount = double.tryParse(amountCtrl.text) ?? 0;
                 if (amount <= 0) {
                   _showMessage('Please enter a valid amount.');
                   return;
                 }
                 Navigator.pop(ctx);
-                await ref
-                    .read(listahanProvider.notifier)
-                    .recordRepayment(entry.entryId, amount,
-                        notes: notesCtrl.text.isNotEmpty
-                            ? notesCtrl.text
-                            : null);
+                await ref.read(listahanProvider.notifier).recordRepayment(
+                    entry.entryId, amount,
+                    notes: notesCtrl.text.isNotEmpty ? notesCtrl.text : null);
                 _showMessage('Repayment recorded');
               },
               style: ElevatedButton.styleFrom(
@@ -357,275 +353,284 @@ class _ListahanContentState extends ConsumerState<_ListahanContent> {
       'settled',
     ];
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 90),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          // Header
-          Row(
-            children: <Widget>[
-              const Icon(Icons.menu_book_outlined),
-              const SizedBox(width: 8),
-              Text('Listahan',
-                  style: Theme.of(context).textTheme.titleLarge),
-              const Spacer(),
-              ElevatedButton.icon(
-                onPressed: _openAddCreditDialog,
-                icon: const Icon(Icons.add, size: 16),
-                label: const Text('Add'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: c.primary,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16)),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-
-          // Stats row
-          Row(children: <Widget>[
-            _StatCard(
-              label: 'Entries',
-              value: '${state.entries.length}',
-              color: c.primary,
-            ),
-            const SizedBox(width: 8),
-            _StatCard(
-              label: 'Overdue',
-              value: '${state.overdueCount}',
-              color: c.error,
-            ),
-            const SizedBox(width: 8),
-            _StatCard(
-              label: 'Outstanding',
-              value: 'PHP ${(state.totalOutstanding / 1000).toStringAsFixed(1)}k',
-              color: c.warning,
-            ),
-          ]),
-          const SizedBox(height: 10),
-
-          // Search
-          TextField(
-            onChanged: (String v) =>
-                ref.read(listahanProvider.notifier).setSearch(v),
-            decoration: const InputDecoration(
-              prefixIcon: Icon(Icons.search),
-              hintText: 'Search customer...',
-            ),
-          ),
-          const SizedBox(height: 8),
-
-          // Status filter chips
-          SizedBox(
-            height: 38,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              children: filters.asMap().entries.map((MapEntry<int, String> e) {
-                final String filter = e.value;
-                final String? filterVal =
-                    filter == 'All' ? null : filter;
-                final bool selected = state.filterStatus == filterVal;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: ChoiceChip(
-                    label: Text(filter[0].toUpperCase() +
-                        filter.substring(1)),
-                    selected: selected,
-                    onSelected: (_) => ref
-                        .read(listahanProvider.notifier)
-                        .setFilter(filterVal),
-                    selectedColor: c.primary.withValues(alpha: 0.15),
-                    side: BorderSide(
-                        color: selected ? c.primary : c.border),
+    return RefreshIndicator(
+      onRefresh: () => ref.read(listahanProvider.notifier).refresh(),
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 90),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            // Header
+            Row(
+              children: <Widget>[
+                const Icon(Icons.menu_book_outlined),
+                const SizedBox(width: 8),
+                Text('Listahan', style: Theme.of(context).textTheme.titleLarge),
+                const Spacer(),
+                ElevatedButton.icon(
+                  onPressed: _openAddCreditDialog,
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('Add'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: c.primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16)),
                   ),
-                );
-              }).toList(),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: 10),
+            const SizedBox(height: 10),
 
-          if (filtered.isEmpty)
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 30),
-                child: Text('No credit entries',
-                    style: TextStyle(color: c.textSecondary)),
+            // Stats row
+            Row(children: <Widget>[
+              _StatCard(
+                label: 'Entries',
+                value: '${state.entries.length}',
+                color: c.primary,
               ),
-            )
-          else
-            ...filtered.map((CreditEntry entry) {
-              final bool overdue = entry.isOverdue;
-              final bool settled = entry.isSettled;
-              final Color statusColor = settled
-                  ? c.info
-                  : overdue
-                      ? c.error
-                      : c.primary;
-              final String statusLabel =
-                  entry.status[0].toUpperCase() + entry.status.substring(1);
+              const SizedBox(width: 8),
+              _StatCard(
+                label: 'Overdue',
+                value: '${state.overdueCount}',
+                color: c.error,
+              ),
+              const SizedBox(width: 8),
+              _StatCard(
+                label: 'Outstanding',
+                value: state.totalOutstanding >= 100000
+                    ? '₱${(state.totalOutstanding / 1000).toStringAsFixed(1)}k'
+                    : '₱${state.totalOutstanding.toStringAsFixed(0)}',
+                color: c.warning,
+              ),
+            ]),
+            const SizedBox(height: 10),
 
-              List<String> items = <String>[];
-              try {
-                final dynamic decoded = jsonDecode(entry.items);
-                if (decoded is List<dynamic>) {
-                  items = decoded.cast<String>();
-                }
-              } catch (_) {
-                items = <String>[entry.items];
-              }
+            // Search
+            TextField(
+              onChanged: (String v) =>
+                  ref.read(listahanProvider.notifier).setSearch(v),
+              decoration: const InputDecoration(
+                prefixIcon: Icon(Icons.search),
+                hintText: 'Search customer...',
+              ),
+            ),
+            const SizedBox(height: 8),
 
-              return Card(
-                margin: const EdgeInsets.only(bottom: 10),
+            // Status filter chips
+            SizedBox(
+              height: 38,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children:
+                    filters.asMap().entries.map((MapEntry<int, String> e) {
+                  final String filter = e.value;
+                  final String? filterVal = filter == 'All' ? null : filter;
+                  final bool selected = state.filterStatus == filterVal;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: ChoiceChip(
+                      label:
+                          Text(filter[0].toUpperCase() + filter.substring(1)),
+                      selected: selected,
+                      onSelected: (_) => ref
+                          .read(listahanProvider.notifier)
+                          .setFilter(filterVal),
+                      selectedColor: c.primary.withValues(alpha: 0.15),
+                      side: BorderSide(color: selected ? c.primary : c.border),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+            const SizedBox(height: 10),
+
+            if (filtered.isEmpty)
+              Center(
                 child: Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Row(children: <Widget>[
-                        Expanded(
-                          child: Text(
-                            entry.customerName ?? 'Unknown',
-                            style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 16),
+                  padding: const EdgeInsets.symmetric(vertical: 30),
+                  child: Text('No credit entries',
+                      style: TextStyle(color: c.textSecondary)),
+                ),
+              )
+            else
+              ...filtered.map((CreditEntry entry) {
+                final bool overdue = entry.isOverdue;
+                final bool settled = entry.isSettled;
+                final Color statusColor = settled
+                    ? c.info
+                    : overdue
+                        ? c.error
+                        : c.primary;
+                final String statusLabel =
+                    entry.status[0].toUpperCase() + entry.status.substring(1);
+
+                List<String> items = <String>[];
+                try {
+                  final dynamic decoded = jsonDecode(entry.items);
+                  if (decoded is List<dynamic>) {
+                    items = decoded.cast<String>();
+                  }
+                } catch (_) {
+                  items = <String>[entry.items];
+                }
+
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Row(children: <Widget>[
+                          Expanded(
+                            child: Text(
+                              entry.customerName ?? 'Unknown',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w700, fontSize: 16),
+                            ),
                           ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: statusColor.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                                color: statusColor.withValues(alpha: 0.4)),
-                          ),
-                          child: Text(
-                            statusLabel,
-                            style: TextStyle(
-                                color: statusColor,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700),
-                          ),
-                        ),
-                      ]),
-                      if (entry.customerPhone != null) ...<Widget>[
-                        const SizedBox(height: 2),
-                        Text(entry.customerPhone!,
-                            style: TextStyle(
-                                color: c.textSecondary, fontSize: 12)),
-                      ],
-                      const SizedBox(height: 6),
-                      if (items.isNotEmpty)
-                        Text(items.join(', '),
-                            style: TextStyle(
-                                color: c.textSecondary, fontSize: 13),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis),
-                      const SizedBox(height: 8),
-                      Row(children: <Widget>[
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: <Widget>[
-                            Text(
-                              'PHP ${entry.remaining.toStringAsFixed(2)} remaining',
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: statusColor.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                  color: statusColor.withValues(alpha: 0.4)),
+                            ),
+                            child: Text(
+                              statusLabel,
                               style: TextStyle(
                                   color: statusColor,
+                                  fontSize: 11,
                                   fontWeight: FontWeight.w700),
                             ),
-                            Text(
-                              'Due: ${DateFormat('MMM d').format(entry.dueDate)}',
+                          ),
+                        ]),
+                        if (entry.customerPhone != null) ...<Widget>[
+                          const SizedBox(height: 2),
+                          Text(entry.customerPhone!,
                               style: TextStyle(
-                                  color: c.textSecondary, fontSize: 12),
-                            ),
-                          ],
-                        ),
-                        const Spacer(),
-                        // Progress bar
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: <Widget>[
-                            Text(
-                              '${((entry.amountPaid / entry.amount) * 100).round()}% paid',
+                                  color: c.textSecondary, fontSize: 12)),
+                        ],
+                        const SizedBox(height: 6),
+                        if (items.isNotEmpty)
+                          Text(items.join(', '),
                               style: TextStyle(
-                                  color: c.textSecondary, fontSize: 11),
-                            ),
-                            const SizedBox(height: 4),
-                            SizedBox(
-                              width: 80,
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(4),
-                                child: LinearProgressIndicator(
-                                  value:
-                                      entry.amountPaid / entry.amount,
-                                  minHeight: 6,
-                                  backgroundColor:
-                                      c.border,
-                                  valueColor:
-                                      AlwaysStoppedAnimation<Color>(
-                                          statusColor),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ]),
-                      if (!settled) ...<Widget>[
+                                  color: c.textSecondary, fontSize: 13),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis),
                         const SizedBox(height: 8),
-                        Row(
-                          children: <Widget>[
-                            Expanded(
-                              child: OutlinedButton(
-                                onPressed: () =>
-                                    _showRepayDialog(entry),
-                                style: OutlinedButton.styleFrom(
-                                  side: BorderSide(color: c.primary),
-                                  shape: RoundedRectangleBorder(
-                                      borderRadius:
-                                          BorderRadius.circular(10)),
-                                ),
-                                child: Text('Record Payment',
-                                    style:
-                                        TextStyle(color: c.primary)),
+                        Row(children: <Widget>[
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Text(
+                                'PHP ${entry.remaining.toStringAsFixed(2)} remaining',
+                                style: TextStyle(
+                                    color: statusColor,
+                                    fontWeight: FontWeight.w700),
                               ),
-                            ),
-                            if (entry.customerPhone != null) ...<Widget>[
-                              const SizedBox(width: 8),
-                              IconButton.filledTonal(
-                                onPressed: () async {
-                                  final double amt = entry.remaining;
-                                  final String storeName = ref.read(authProvider).value?.user?.storeName ?? 'our store';
-                                  final String msg = 'Hi ${entry.customerName}, reminder for your balance of PHP ${amt.toStringAsFixed(2)} at $storeName. Thank you!';
-                                  final Uri uri = Uri(
-                                    scheme: 'sms',
-                                    path: entry.customerPhone!,
-                                    queryParameters: <String, String>{'body': msg},
-                                  );
-                                  if (await canLaunchUrl(uri)) {
-                                    await launchUrl(uri);
-                                  } else {
-                                    _showMessage('Could not launch SMS app');
-                                  }
-                                },
-                                icon: Icon(Icons.sms_outlined, color: c.primary),
-                                style: IconButton.styleFrom(
-                                  backgroundColor: c.primary.withValues(alpha: 0.1),
-                                  shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(10)),
+                              Text(
+                                'Due: ${DateFormat('MMM d').format(entry.dueDate)}',
+                                style: TextStyle(
+                                    color: c.textSecondary, fontSize: 12),
+                              ),
+                            ],
+                          ),
+                          const Spacer(),
+                          // Progress bar
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: <Widget>[
+                              Text(
+                                '${((entry.amountPaid / entry.amount) * 100).round()}% paid',
+                                style: TextStyle(
+                                    color: c.textSecondary, fontSize: 11),
+                              ),
+                              const SizedBox(height: 4),
+                              SizedBox(
+                                width: 80,
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: LinearProgressIndicator(
+                                    value: entry.amountPaid / entry.amount,
+                                    minHeight: 6,
+                                    backgroundColor: c.border,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                        statusColor),
+                                  ),
                                 ),
                               ),
                             ],
-                          ],
-                        ),
+                          ),
+                        ]),
+                        if (!settled) ...<Widget>[
+                          const SizedBox(height: 8),
+                          Row(
+                            children: <Widget>[
+                              Expanded(
+                                child: OutlinedButton(
+                                  onPressed: () => _showRepayDialog(entry),
+                                  style: OutlinedButton.styleFrom(
+                                    side: BorderSide(color: c.primary),
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(10)),
+                                  ),
+                                  child: Text('Record Payment',
+                                      style: TextStyle(color: c.primary)),
+                                ),
+                              ),
+                              if (entry.customerPhone != null) ...<Widget>[
+                                const SizedBox(width: 8),
+                                IconButton.filledTonal(
+                                  onPressed: () async {
+                                    final double amt = entry.remaining;
+                                    final String storeName = ref
+                                            .read(authProvider)
+                                            .value
+                                            ?.user
+                                            ?.storeName ??
+                                        'our store';
+                                    final String msg =
+                                        'Hi ${entry.customerName}, reminder for your balance of PHP ${amt.toStringAsFixed(2)} at $storeName. Thank you!';
+                                    final Uri uri = Uri(
+                                      scheme: 'sms',
+                                      path: entry.customerPhone!,
+                                      queryParameters: <String, String>{
+                                        'body': msg
+                                      },
+                                    );
+                                    if (await canLaunchUrl(uri)) {
+                                      await launchUrl(uri);
+                                    } else {
+                                      _showMessage('Could not launch SMS app');
+                                    }
+                                  },
+                                  icon: Icon(Icons.sms_outlined,
+                                      color: c.primary),
+                                  style: IconButton.styleFrom(
+                                    backgroundColor:
+                                        c.primary.withValues(alpha: 0.1),
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(10)),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
-                ),
-              );
-            }),
-        ],
+                );
+              }),
+          ],
+        ),
       ),
     );
   }
@@ -657,12 +662,9 @@ class _StatCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(value,
-                style:
-                    TextStyle(color: color, fontWeight: FontWeight.w800)),
+                style: TextStyle(color: color, fontWeight: FontWeight.w800)),
             const SizedBox(height: 2),
-            Text(label,
-                style:
-                    TextStyle(color: c.textSecondary, fontSize: 11)),
+            Text(label, style: TextStyle(color: c.textSecondary, fontSize: 11)),
           ],
         ),
       ),

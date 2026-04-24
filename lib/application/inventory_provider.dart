@@ -62,8 +62,7 @@ class InventoryState {
 class InventoryNotifier extends AsyncNotifier<InventoryState> {
   final ProductDao _dao = ProductDao();
 
-  bool get _isOffline =>
-      ref.read(authProvider).value?.isOfflineMode ?? false;
+  bool get _isOffline => ref.read(authProvider).value?.isOfflineMode ?? false;
 
   @override
   Future<InventoryState> build() async => _load();
@@ -127,6 +126,7 @@ class InventoryNotifier extends AsyncNotifier<InventoryState> {
           operation: 'create',
           payload: product.toMap(),
         );
+        ref.read(syncProvider.notifier).sync();
       }
     } catch (_) {}
     await refresh();
@@ -145,6 +145,7 @@ class InventoryNotifier extends AsyncNotifier<InventoryState> {
           operation: 'update',
           payload: product.toMap(),
         );
+        ref.read(syncProvider.notifier).sync();
       }
     } catch (_) {}
     await refresh();
@@ -159,6 +160,7 @@ class InventoryNotifier extends AsyncNotifier<InventoryState> {
         operation: 'delete',
         payload: <String, dynamic>{'product_id': productId},
       );
+      ref.read(syncProvider.notifier).sync();
     }
     await refresh();
   }
@@ -214,6 +216,7 @@ class InventoryNotifier extends AsyncNotifier<InventoryState> {
         operation: 'create',
         payload: cat.toMap(),
       );
+      ref.read(syncProvider.notifier).sync();
     }
     await refresh();
   }
@@ -227,6 +230,7 @@ class InventoryNotifier extends AsyncNotifier<InventoryState> {
         operation: 'delete',
         payload: <String, dynamic>{'category_id': categoryId},
       );
+      ref.read(syncProvider.notifier).sync();
     }
     await refresh();
   }

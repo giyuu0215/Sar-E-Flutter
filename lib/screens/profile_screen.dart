@@ -137,8 +137,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         ),
         actions: <Widget>[
           TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel')),
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(ctx);
@@ -170,8 +169,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         ),
         actions: <Widget>[
           TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel')),
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () async {
               final String name = ctrl.text.trim();
@@ -428,7 +426,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final SyncState sync = ref.watch(syncProvider).value ?? const SyncState();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Profile & Settings')),
+      appBar: AppBar(title: const Text('Profile')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: <Widget>[
@@ -526,21 +524,59 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         style: TextStyle(color: c.error, fontSize: 11)),
                   ],
                   const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: sync.isSyncing
-                          ? null
-                          : () => ref.read(syncProvider.notifier).sync(),
-                      icon: sync.isSyncing
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Icon(Icons.sync),
-                      label: Text(sync.isSyncing ? 'Syncing...' : 'Sync Now'),
+                  Row(children: <Widget>[
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: sync.isSyncing
+                            ? null
+                            : () => ref.read(syncProvider.notifier).sync(),
+                        icon: sync.isSyncing
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2))
+                            : const Icon(Icons.sync),
+                        label: Text(sync.isSyncing ? 'Syncing...' : 'Sync Now'),
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: sync.isSyncing
+                            ? null
+                            : () async {
+                                final bool? ok = await showDialog<bool>(
+                                  context: context,
+                                  builder: (BuildContext ctx) => AlertDialog(
+                                    title: const Text('Force Full Sync'),
+                                    content: const Text(
+                                      'This will re-upload ALL local data to the cloud. '
+                                      'Use this if your cloud data is missing or out of date.',
+                                    ),
+                                    actions: <Widget>[
+                                      TextButton(
+                                          onPressed: () =>
+                                              Navigator.pop(ctx, false),
+                                          child: const Text('Cancel')),
+                                      ElevatedButton(
+                                          onPressed: () =>
+                                              Navigator.pop(ctx, true),
+                                          child: const Text('Force Sync')),
+                                    ],
+                                  ),
+                                );
+                                if (ok == true) {
+                                  ref
+                                      .read(syncProvider.notifier)
+                                      .forceFullSync();
+                                }
+                              },
+                        icon: const Icon(Icons.cloud_upload_outlined),
+                        label: const Text('Full Sync'),
+                      ),
+                    ),
+                  ]),
                 ],
               ),
             ),
@@ -593,9 +629,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   final String key = _qrSlots[i]['key']!;
                   final String label = _labels[key] ?? _qrSlots[i]['label']!;
                   final String? data = _qrData[key];
-                  final bool hasQr =
-                      data != null && data.isNotEmpty && !data.startsWith('IMAGE:');
-                  final bool hasImage = data != null && data.startsWith('IMAGE:');
+                  final bool hasQr = data != null &&
+                      data.isNotEmpty &&
+                      !data.startsWith('IMAGE:');
+                  final bool hasImage =
+                      data != null && data.startsWith('IMAGE:');
                   final bool isDeletable = key.startsWith('qr_extra_');
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -610,8 +648,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           size: 20,
                         ),
                         title: Text(label,
-                            style: const TextStyle(
-                                fontWeight: FontWeight.w600)),
+                            style:
+                                const TextStyle(fontWeight: FontWeight.w600)),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: <Widget>[
@@ -651,20 +689,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       if (hasQr) ...<Widget>[
                         Center(
                           child: Padding(
-                            padding:
-                                const EdgeInsets.fromLTRB(24, 0, 24, 12),
+                            padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
                             child: Column(
                               children: <Widget>[
                                 Container(
                                   padding: const EdgeInsets.all(10),
                                   decoration: BoxDecoration(
-                                    color:
-                                        c.primary.withValues(alpha: 0.08),
-                                    borderRadius:
-                                        BorderRadius.circular(14),
+                                    color: c.primary.withValues(alpha: 0.08),
+                                    borderRadius: BorderRadius.circular(14),
                                     border: Border.all(
-                                        color: c.primary
-                                            .withValues(alpha: 0.25)),
+                                        color:
+                                            c.primary.withValues(alpha: 0.25)),
                                   ),
                                   child: SizedBox(
                                     width: 160,
@@ -690,8 +725,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                 Text(
                                   'Regenerated from your $label QR',
                                   style: TextStyle(
-                                      color: c.textTertiary,
-                                      fontSize: 11),
+                                      color: c.textTertiary, fontSize: 11),
                                 ),
                               ],
                             ),
@@ -701,30 +735,26 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         // Fallback: show original image if QR couldn't be decoded
                         Center(
                           child: Padding(
-                            padding:
-                                const EdgeInsets.fromLTRB(24, 0, 24, 12),
+                            padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
                             child: Column(
                               children: <Widget>[
                                 ClipRRect(
                                   borderRadius: BorderRadius.circular(12),
-                                  child: Image.file(
-                                      File(data.substring(6)),
-                                      height: 140,
-                                      fit: BoxFit.contain),
+                                  child: Image.file(File(data.substring(6)),
+                                      height: 140, fit: BoxFit.contain),
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
                                   'QR could not be auto-decoded — showing image',
-                                  style: TextStyle(
-                                      color: c.warning, fontSize: 11),
+                                  style:
+                                      TextStyle(color: c.warning, fontSize: 11),
                                 ),
                               ],
                             ),
                           ),
                         ),
                       ],
-                      if (i < _qrSlots.length - 1)
-                        const Divider(height: 1),
+                      if (i < _qrSlots.length - 1) const Divider(height: 1),
                     ],
                   );
                 }),

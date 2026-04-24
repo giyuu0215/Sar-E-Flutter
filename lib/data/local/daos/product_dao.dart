@@ -147,8 +147,7 @@ class ProductDao {
         conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
-  Future<void> acceptPriceSuggestion(
-      String productId, double newPrice) async {
+  Future<void> acceptPriceSuggestion(String productId, double newPrice) async {
     final Database db = await _db;
     // Update the product price
     await db.rawUpdate(

@@ -7,6 +7,8 @@ import '../data/local/daos/credit_dao.dart';
 import '../data/local/daos/customer_dao.dart';
 import '../domain/entities/credit_entry.dart';
 import '../domain/entities/customer.dart';
+import 'auth_provider.dart';
+import 'sync_provider.dart';
 
 const Uuid _uuid = Uuid();
 
@@ -41,8 +43,7 @@ class ListahanState {
     return list.toList();
   }
 
-  int get overdueCount =>
-      entries.where((CreditEntry e) => e.isOverdue).length;
+  int get overdueCount => entries.where((CreditEntry e) => e.isOverdue).length;
 
   ListahanState copyWith({
     List<CreditEntry>? entries,
@@ -82,8 +83,7 @@ class ListahanNotifier extends AsyncNotifier<ListahanState> {
   }
 
   Future<void> refresh() async {
-    state = AsyncData<ListahanState>(
-        state.value!.copyWith(isLoading: true));
+    state = AsyncData<ListahanState>(state.value!.copyWith(isLoading: true));
     state = AsyncData<ListahanState>(await _load());
   }
 
@@ -98,9 +98,21 @@ class ListahanNotifier extends AsyncNotifier<ListahanState> {
     state = AsyncData<ListahanState>(state.value!.copyWith(searchQuery: q));
   }
 
+  bool get _isOffline => ref.read(authProvider).value?.isOfflineMode ?? false;
+
   // ── Customers ─────────────────────────────────────────────────────────────
 
+  /// Insert customer + sync + refresh UI. Use from top-level actions.
   Future<Customer> addCustomer(String name, {String? mobile}) async {
+    final Customer customer = await addCustomerSilent(name, mobile: mobile);
+    await refresh();
+    return customer;
+  }
+
+  /// Insert customer + sync but **skip** refresh.
+  /// Use from inside open dialogs to avoid orphaning widget contexts
+  /// (which causes the grey overlay bug).
+  Future<Customer> addCustomerSilent(String name, {String? mobile}) async {
     final Customer customer = Customer(
       customerId: _uuid.v4(),
       name: name,
@@ -110,12 +122,21 @@ class ListahanNotifier extends AsyncNotifier<ListahanState> {
       createdAt: DateTime.now(),
     );
     await _customerDao.insert(customer);
-    await refresh();
+    if (!_isOffline) {
+      try {
+        await SyncNotifier.enqueue(
+          entityType: 'customers',
+          entityId: customer.customerId,
+          operation: 'create',
+          payload: customer.toMap(),
+        );
+        ref.read(syncProvider.notifier).sync(); // fire-and-forget
+      } catch (_) {}
+    }
     return customer;
   }
 
-  Future<List<Customer>> searchCustomers(String q) =>
-      _customerDao.search(q);
+  Future<List<Customer>> searchCustomers(String q) => _customerDao.search(q);
 
   // ── Credit entries ────────────────────────────────────────────────────────
 
@@ -146,11 +167,22 @@ class ListahanNotifier extends AsyncNotifier<ListahanState> {
         customer.creditBalance + amount,
       );
     }
+    if (!_isOffline) {
+      try {
+        await SyncNotifier.enqueue(
+          entityType: 'credit_entries',
+          entityId: entry.entryId,
+          operation: 'create',
+          payload: entry.toMap(),
+        );
+        ref.read(syncProvider.notifier).sync(); // fire-and-forget
+      } catch (_) {}
+    }
     await refresh();
   }
 
-  Future<void> recordRepayment(
-      String entryId, double amountPaid, {String? notes}) async {
+  Future<void> recordRepayment(String entryId, double amountPaid,
+      {String? notes}) async {
     final CreditEntry? entry = await _creditDao.getById(entryId);
     if (entry == null) return;
 
@@ -176,13 +208,22 @@ class ListahanNotifier extends AsyncNotifier<ListahanState> {
     await _creditDao.update(updated);
 
     // Update customer balance
-    final Customer? customer =
-        await _customerDao.getById(entry.customerId);
+    final Customer? customer = await _customerDao.getById(entry.customerId);
     if (customer != null) {
       final double newBalance =
           (customer.creditBalance - amountPaid).clamp(0, double.infinity);
-      await _customerDao.updateCreditBalance(
-          entry.customerId, newBalance);
+      await _customerDao.updateCreditBalance(entry.customerId, newBalance);
+    }
+    if (!_isOffline) {
+      try {
+        await SyncNotifier.enqueue(
+          entityType: 'repayments',
+          entityId: record.repaymentId,
+          operation: 'create',
+          payload: record.toMap(),
+        );
+        ref.read(syncProvider.notifier).sync(); // fire-and-forget
+      } catch (_) {}
     }
     await refresh();
   }
@@ -201,7 +242,6 @@ class ListahanNotifier extends AsyncNotifier<ListahanState> {
       _creditDao.getRepayments(entryId);
 }
 
-final AsyncNotifierProvider<ListahanNotifier, ListahanState>
-    listahanProvider =
+final AsyncNotifierProvider<ListahanNotifier, ListahanState> listahanProvider =
     AsyncNotifierProvider<ListahanNotifier, ListahanState>(
         ListahanNotifier.new);
