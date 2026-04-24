@@ -178,8 +178,9 @@ class CartNotifier extends Notifier<CartState> {
       final DateTime now = DateTime.now();
 
       final bool isCash = state.paymentMethod == 'cash';
-      final String txnStatus = isCash ? 'completed' : 'pending';
-      final String payStatus = isCash ? 'confirmed' : 'pending';
+      // For ewallet: cashier confirms payment received → mark completed immediately
+      final String txnStatus = 'completed';
+      final String payStatus = 'confirmed';
 
       final Transaction txn = Transaction(
         transactionId: txnId,

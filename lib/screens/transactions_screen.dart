@@ -6,9 +6,9 @@ import '../data/local/daos/transaction_dao.dart';
 import '../domain/entities/transaction.dart';
 import '../theme/app_theme.dart';
 
-final FutureProvider<List<Transaction>> allTransactionsProvider =
-    // ignore: deprecated_member_use
-    FutureProvider<List<Transaction>>((FutureProviderRef<List<Transaction>> ref) async {
+final AutoDisposeFutureProvider<List<Transaction>> allTransactionsProvider =
+    FutureProvider.autoDispose<List<Transaction>>(
+        (AutoDisposeFutureProviderRef<List<Transaction>> ref) async {
   final TransactionDao dao = TransactionDao();
   return dao.getRecent(limit: 200);
 });

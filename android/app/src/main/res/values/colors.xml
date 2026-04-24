@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#FFFFFF</color>
+    <!-- Sar-E brand seed — matches _brandSeed in app_theme.dart -->
+    <color name="brandRed">#C9352C</color>
 </resources>

@@ -314,87 +314,228 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
     if (receipt == null || !mounted) return;
 
     Map<String, dynamic> data = <String, dynamic>{};
+    List<dynamic> items = <dynamic>[];
     try {
       data = jsonDecode(receipt.qrPayload) as Map<String, dynamic>;
+      items = (data['items'] as List<dynamic>?) ?? <dynamic>[];
     } catch (_) {}
+
+    final String payMethod =
+        (data['payment_method'] as String? ?? 'cash').toUpperCase();
+    final double total = (data['total'] as num?)?.toDouble() ?? 0;
+    final double changeDue = ref.read(cartProvider).changeDue;
+    final String dateStr = receipt.timestamp != null
+        ? '${receipt.timestamp!.year}-'
+            '${receipt.timestamp!.month.toString().padLeft(2, '0')}-'
+            '${receipt.timestamp!.day.toString().padLeft(2, '0')} '
+            '${receipt.timestamp!.hour.toString().padLeft(2, '0')}:'
+            '${receipt.timestamp!.minute.toString().padLeft(2, '0')}'
+        : '';
 
     await showDialog<void>(
       context: context,
       builder: (BuildContext ctx) {
         final AppColors c = appColors(ctx);
-        // NOTE: Do NOT use SingleChildScrollView here —
-        // QrImageView uses LayoutBuilder which crashes on intrinsic sizing.
         return AlertDialog(
-          title: Row(children: <Widget>[
-            Icon(Icons.check_circle_rounded, color: Colors.green.shade600),
-            const SizedBox(width: 8),
-            const Expanded(child: Text('Transaction Complete')),
-          ]),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              // Explicit size prevents LayoutBuilder intrinsic crash
-              SizedBox(
-                width: 170,
-                height: 170,
-                child: Container(
-                  padding: const EdgeInsets.all(8),
+          contentPadding: EdgeInsets.zero,
+          content: SizedBox(
+            width: 320,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                // ── Header ──
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 20, vertical: 16),
                   decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
+                    color: c.primary,
+                    borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(28)),
                   ),
-                  child: QrImageView(
-                    data: receipt.qrPayload,
-                    version: QrVersions.auto,
-                    size: 154,
-                    backgroundColor: Colors.white,
+                  child: Column(
+                    children: <Widget>[
+                      Icon(Icons.check_circle_rounded,
+                          color: Colors.white, size: 36),
+                      const SizedBox(height: 6),
+                      Text(
+                        receipt.storeName,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 18,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Receipt #${receipt.receiptId.substring(0, 8).toUpperCase()}',
+                        style: const TextStyle(
+                            color: Colors.white70, fontSize: 12),
+                      ),
+                      if (dateStr.isNotEmpty)
+                        Text(
+                          dateStr,
+                          style: const TextStyle(
+                              color: Colors.white60, fontSize: 11),
+                        ),
+                    ],
                   ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                '₱${(data['total'] as num?)?.toStringAsFixed(2) ?? '—'}',
-                style: TextStyle(
-                    color: c.primary,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 26),
-              ),
-              Text(
-                receipt.storeName,
-                style: TextStyle(color: c.textSecondary, fontSize: 13),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Receipt #${receipt.receiptId.substring(0, 8).toUpperCase()}',
-                style: TextStyle(color: c.textTertiary, fontSize: 11),
-              ),
-              if (data['payment_method'] == 'cash') ...<Widget>[
-                const SizedBox(height: 8),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: c.info.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
+
+                // ── Items list ──
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        ...items.map((dynamic it) {
+                          final Map<String, dynamic> item =
+                              it as Map<String, dynamic>;
+                          final String name =
+                              item['name'] as String? ?? '-';
+                          final int qty =
+                              (item['qty'] as num?)?.toInt() ?? 1;
+                          final double price =
+                              (item['price'] as num?)?.toDouble() ?? 0;
+                          return Padding(
+                            padding:
+                                const EdgeInsets.symmetric(vertical: 4),
+                            child: Row(
+                              children: <Widget>[
+                                Expanded(
+                                  child: Text(
+                                    '$qty× $name',
+                                    style: const TextStyle(fontSize: 13),
+                                  ),
+                                ),
+                                Text(
+                                  '₱${(qty * price).toStringAsFixed(2)}',
+                                  style: TextStyle(
+                                      color: c.primary,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                        Divider(color: c.border, height: 20),
+
+                        // ── Totals ──
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: <Widget>[
+                            const Text('Payment',
+                                style: TextStyle(fontSize: 12)),
+                            Text(payMethod,
+                                style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: <Widget>[
+                            Text('TOTAL',
+                                style: TextStyle(
+                                    color: c.primary,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 16)),
+                            Text(
+                              '₱${total.toStringAsFixed(2)}',
+                              style: TextStyle(
+                                  color: c.primary,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 20),
+                            ),
+                          ],
+                        ),
+                        if (payMethod == 'CASH' && changeDue > 0) ...<Widget>[
+                          const SizedBox(height: 4),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: <Widget>[
+                              Text('Change',
+                                  style: TextStyle(
+                                      color: c.info, fontSize: 13)),
+                              Text(
+                                '₱${changeDue.toStringAsFixed(2)}',
+                                style: TextStyle(
+                                    color: c.info,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 13),
+                              ),
+                            ],
+                          ),
+                        ],
+                        const SizedBox(height: 12),
+
+                        // ── Receipt QR (colored) ──
+                        Center(
+                          child: Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: c.primary.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                  color: c.primary.withValues(alpha: 0.25)),
+                            ),
+                            child: SizedBox(
+                              width: 140,
+                              height: 140,
+                              child: QrImageView(
+                                data: receipt.qrPayload,
+                                version: QrVersions.auto,
+                                size: 140,
+                                backgroundColor: Colors.transparent,
+                                eyeStyle: QrEyeStyle(
+                                  eyeShape: QrEyeShape.square,
+                                  color: c.primaryDark,
+                                ),
+                                dataModuleStyle: QrDataModuleStyle(
+                                  dataModuleShape:
+                                      QrDataModuleShape.square,
+                                  color: c.primaryDark,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Center(
+                          child: Text(
+                            'Scan to verify receipt',
+                            style: TextStyle(
+                                color: c.textTertiary, fontSize: 11),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                    ),
                   ),
-                  child: Text(
-                    'Change: ₱${ref.read(cartProvider).changeDue.toStringAsFixed(2)}',
-                    style: TextStyle(color: c.info, fontSize: 13),
+                ),
+
+                // ── Actions ──
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () => Navigator.pop(ctx),
+                      icon: const Icon(Icons.check, size: 18),
+                      label: const Text('Done'),
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green.shade600,
+                          foregroundColor: Colors.white),
+                    ),
                   ),
                 ),
               ],
-            ],
-          ),
-          actions: <Widget>[
-            ElevatedButton.icon(
-              onPressed: () => Navigator.pop(ctx),
-              icon: const Icon(Icons.check),
-              label: const Text('Done'),
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green.shade600,
-                  foregroundColor: Colors.white),
             ),
-          ],
+          ),
         );
       },
     );
@@ -450,6 +591,13 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                   Text('POS',
                       style: Theme.of(context).textTheme.titleLarge),
                   const Spacer(),
+                  // Always-visible scan button
+                  IconButton.filledTonal(
+                    onPressed: _scanAndAdd,
+                    icon: const Icon(Icons.qr_code_scanner, size: 20),
+                    tooltip: 'Scan barcode',
+                  ),
+                  const SizedBox(width: 6),
                   IconButton.filledTonal(
                     onPressed: () =>
                         setState(() => _showSearch = !_showSearch),
@@ -610,9 +758,81 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                                   Icons.remove_circle_outline),
                               iconSize: 20,
                             ),
-                            Text('${item.qty}',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w700)),
+                            // Tap qty number to edit manually
+                            GestureDetector(
+                              onTap: () async {
+                                final TextEditingController qtyCtrl =
+                                    TextEditingController(
+                                        text: '${item.qty}');
+                                final String? result =
+                                    await showDialog<String>(
+                                  context: context,
+                                  builder: (BuildContext dCtx) =>
+                                      AlertDialog(
+                                    title: Text(item.product.name),
+                                    content: TextField(
+                                      controller: qtyCtrl,
+                                      autofocus: true,
+                                      keyboardType:
+                                          TextInputType.number,
+                                      inputFormatters: <TextInputFormatter>[
+                                        FilteringTextInputFormatter
+                                            .digitsOnly,
+                                      ],
+                                      decoration:
+                                          const InputDecoration(
+                                              labelText: 'Quantity'),
+                                    ),
+                                    actions: <Widget>[
+                                      TextButton(
+                                          onPressed: () =>
+                                              Navigator.pop(dCtx),
+                                          child: const Text('Cancel')),
+                                      ElevatedButton(
+                                          onPressed: () =>
+                                              Navigator.pop(
+                                                  dCtx, qtyCtrl.text),
+                                          child: const Text('Set')),
+                                    ],
+                                  ),
+                                );
+                                if (result != null) {
+                                  final int? newQty =
+                                      int.tryParse(result);
+                                  if (newQty != null && newQty > 0) {
+                                    final int delta =
+                                        newQty - item.qty;
+                                    ref
+                                        .read(cartProvider.notifier)
+                                        .changeQty(
+                                            item.product.productId,
+                                            delta);
+                                  } else if (newQty == 0) {
+                                    ref
+                                        .read(cartProvider.notifier)
+                                        .removeItem(
+                                            item.product.productId);
+                                  }
+                                }
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: c.surfaceMuted,
+                                  borderRadius:
+                                      BorderRadius.circular(8),
+                                  border:
+                                      Border.all(color: c.border),
+                                ),
+                                child: Text(
+                                  '${item.qty}',
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 15),
+                                ),
+                              ),
+                            ),
                             IconButton(
                               onPressed: () => ref
                                   .read(cartProvider.notifier)

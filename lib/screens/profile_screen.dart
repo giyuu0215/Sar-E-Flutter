@@ -250,7 +250,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         ],
       ),
     );
-    if (confirmed == true) widget.onLogout();
+    if (confirmed == true && mounted) {
+      // Pop ProfileScreen first, then trigger auth change so _AppEntry rebuilds
+      Navigator.of(context).pop();
+      widget.onLogout();
+    }
   }
 
   /// Sign Out = full reset. Different warning for offline vs Google-linked.
@@ -288,6 +292,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       },
     );
     if (confirmed == true && mounted) {
+      // Pop ProfileScreen first so _AppEntry route transition is clean
+      Navigator.of(context).pop();
       await ref.read(authProvider.notifier).signOut();
     }
   }

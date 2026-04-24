@@ -193,15 +193,38 @@ class _AnalyticsContent extends ConsumerWidget {
           const SizedBox(height: 10),
 
           // Chart
-          if (state.chartData.isNotEmpty)
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    const Text('Revenue vs COGS'),
-                    const SizedBox(height: 8),
+          // Chart
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Row(
+                    children: <Widget>[
+                      const Text('Revenue vs COGS',
+                          style: TextStyle(fontWeight: FontWeight.w600)),
+                      const SizedBox(width: 6),
+                      Tooltip(
+                        message:
+                            'COGS = Cost of Goods Sold\nThe total cost price of all items sold.\nGross Profit = Revenue − COGS',
+                        triggerMode: TooltipTriggerMode.tap,
+                        child: Icon(Icons.info_outline,
+                            size: 16, color: c.textTertiary),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  if (state.chartData.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 24),
+                      child: Center(
+                        child: Text('No completed sales yet in this period',
+                            style: TextStyle(
+                                color: c.textTertiary, fontSize: 13)),
+                      ),
+                    )
+                  else
                     SizedBox(
                       height: 180,
                       width: double.infinity,
@@ -222,30 +245,30 @@ class _AnalyticsContent extends ConsumerWidget {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Row(children: <Widget>[
-                      Container(
-                          width: 12,
-                          height: 3,
-                          color: c.primary),
-                      const SizedBox(width: 4),
-                      Text('Revenue',
-                          style: TextStyle(
-                              color: c.textSecondary, fontSize: 11)),
-                      const SizedBox(width: 12),
-                      Container(
-                          width: 12,
-                          height: 3,
-                          color: Colors.deepOrange),
-                      const SizedBox(width: 4),
-                      Text('COGS',
-                          style: TextStyle(
-                              color: c.textSecondary, fontSize: 11)),
-                    ]),
-                  ],
-                ),
+                  const SizedBox(height: 8),
+                  Row(children: <Widget>[
+                    Container(
+                        width: 12,
+                        height: 3,
+                        color: c.primary),
+                    const SizedBox(width: 4),
+                    Text('Revenue',
+                        style: TextStyle(
+                            color: c.textSecondary, fontSize: 11)),
+                    const SizedBox(width: 12),
+                    Container(
+                        width: 12,
+                        height: 3,
+                        color: Colors.deepOrange),
+                    const SizedBox(width: 4),
+                    Text('COGS (cost of goods sold)',
+                        style: TextStyle(
+                            color: c.textSecondary, fontSize: 11)),
+                  ]),
+                ],
               ),
             ),
+          ),
           const SizedBox(height: 10),
 
           // Top products
@@ -473,9 +496,10 @@ class _RevenueCogsChartPainter extends CustomPainter {
 
     final List<Offset> revPts = <Offset>[];
     final List<Offset> cogsPts = <Offset>[];
+    // Use max(1, length-1) to avoid division by zero on single data point
+    final int spread = math.max(1, data.length - 1);
     for (int i = 0; i < data.length; i++) {
-      final double x = chart.left +
-          (i / math.max(1, data.length - 1)) * chart.width;
+      final double x = chart.left + (i / spread) * chart.width;
       revPts.add(Offset(
           x,
           chart.bottom -

@@ -72,16 +72,54 @@ class _SplashScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final AppColors c = appColors(context);
+    // Use the brand red seed color directly — no context theme needed
+    const Color brandRed = Color(0xFFC9352C);
     return Scaffold(
-      backgroundColor: c.background,
+      backgroundColor: brandRed,
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Image.asset('assets/images/sare_logo.png', height: 80),
-            const SizedBox(height: 24),
-            CircularProgressIndicator(color: c.primary),
+            // Logo on the red background
+            ClipRRect(
+              borderRadius: BorderRadius.circular(24),
+              child: Image.asset(
+                'assets/images/sare_logo.png',
+                height: 100,
+                fit: BoxFit.contain,
+              ),
+            ),
+            const SizedBox(height: 28),
+            // App name
+            const Text(
+              'Sar-E',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 36,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.2,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Point of Sale',
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(height: 48),
+            // Progress indicator in white
+            const SizedBox(
+              width: 140,
+              child: LinearProgressIndicator(
+                color: Colors.white,
+                backgroundColor: Colors.white24,
+                borderRadius: BorderRadius.all(Radius.circular(8)),
+              ),
+            ),
           ],
         ),
       ),
