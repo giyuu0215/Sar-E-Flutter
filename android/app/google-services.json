@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "287635090332",
+    "project_id": "sare-580de",
+    "storage_bucket": "sare-580de.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:287635090332:android:f2ca0cb08afc55559bb659",
+        "android_client_info": {
+          "package_name": "com.example.sare"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCjRFLbBWx8o0tUeiTEWVcIFvK0vh95EUQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

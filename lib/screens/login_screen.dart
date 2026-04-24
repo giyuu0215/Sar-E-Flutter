@@ -167,32 +167,55 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             ),
                           ],
                           const SizedBox(height: 20),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton(
-                              onPressed: auth.isLoading ? null : _submit,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: c.primary,
-                                foregroundColor: dark
-                                    ? const Color(0xFF0D1117)
-                                    : Colors.white,
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 14),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ElevatedButton(
+                                  onPressed: auth.isLoading ? null : _submit,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: c.primary,
+                                    foregroundColor: dark
+                                        ? const Color(0xFF0D1117)
+                                        : Colors.white,
+                                    padding:
+                                        const EdgeInsets.symmetric(vertical: 14),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                  ),
+                                  child: auth.isLoading
+                                      ? const SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: Colors.white))
+                                      : const Text('Login',
+                                          style: TextStyle(
+                                              fontWeight: FontWeight.w700)),
                                 ),
                               ),
-                              child: auth.isLoading
-                                  ? const SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: Colors.white))
-                                  : const Text('Login',
-                                      style: TextStyle(
-                                          fontWeight: FontWeight.w700)),
-                            ),
+                              const SizedBox(width: 12),
+                              ElevatedButton(
+                                onPressed: auth.isLoading
+                                    ? null
+                                    : () async {
+                                        await ref
+                                            .read(authProvider.notifier)
+                                            .loginWithBiometrics();
+                                      },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: c.surface,
+                                  foregroundColor: c.primary,
+                                  padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                    side: BorderSide(color: c.primary),
+                                  ),
+                                ),
+                                child: const Icon(Icons.fingerprint),
+                              ),
+                            ],
                           ),
                         ],
                       ),

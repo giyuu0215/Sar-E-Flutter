@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../application/auth_provider.dart';
+import '../application/inventory_provider.dart';
+import '../application/listahan_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/liquid_background.dart';
 import 'analytics_screen.dart';
@@ -30,18 +32,32 @@ class _MainShellState extends ConsumerState<MainShell> {
   Widget build(BuildContext context) {
     final AppColors c = appColors(context);
 
-    final List<Widget> tabs = <Widget>[
-      const ScannerScreen(),
-      const ListahanScreen(),
-      const InventoryScreen(),
-      AnalyticsScreen(
-        onOpenTransactions: () {
-          Navigator.of(context).push(
-            MaterialPageRoute<void>(builder: (_) => const TransactionsScreen()),
-          );
-        },
-      ),
-    ];
+    final AuthState auth = ref.watch(authProvider).value ?? const AuthState();
+    final bool isOwner = auth.user?.role == 'owner';
+
+    // Calculate total alerts
+    final invAsync = ref.watch(inventoryProvider);
+    final listAsync = ref.watch(listahanProvider);
+    final int lowStock = invAsync.value?.products.where((p) => p.isLowStock).length ?? 0;
+    final int overdue = listAsync.value?.entries.where((e) => e.isOverdue).length ?? 0;
+    final bool hasAlerts = (lowStock + overdue) > 0;
+
+    final List<Widget> tabs = isOwner 
+      ? <Widget>[
+          const ScannerScreen(),
+          const ListahanScreen(),
+          const InventoryScreen(),
+          AnalyticsScreen(
+            onOpenTransactions: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const TransactionsScreen()),
+              );
+            },
+          ),
+        ]
+      : <Widget>[
+          const ScannerScreen(), // Cashiers ONLY see POS
+        ];
 
     return Scaffold(
       appBar: AppBar(
@@ -51,17 +67,18 @@ class _MainShellState extends ConsumerState<MainShell> {
           fit: BoxFit.contain,
         ),
         actions: <Widget>[
-          _HeaderActionButton(
-            tooltip: 'Notifications',
-            icon: Icons.notifications_none_rounded,
-            iconColor: c.warning,
-            showDot: true,
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => const NotificationsScreen(),
+          if (isOwner)
+            _HeaderActionButton(
+              tooltip: 'Notifications',
+              icon: Icons.notifications_none_rounded,
+              iconColor: c.warning,
+              showDot: hasAlerts,
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const NotificationsScreen(),
+                ),
               ),
             ),
-          ),
           _HeaderActionButton(
             tooltip: 'Profile',
             icon: Icons.account_circle_outlined,
@@ -93,33 +110,35 @@ class _MainShellState extends ConsumerState<MainShell> {
           child: KeyedSubtree(key: ValueKey<int>(_index), child: tabs[_index]),
         ),
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (int value) =>
-            setState(() => _index = value),
-        destinations: const <NavigationDestination>[
-          NavigationDestination(
-            icon: Icon(Icons.point_of_sale_outlined),
-            selectedIcon: Icon(Icons.point_of_sale),
-            label: 'POS',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.menu_book_outlined),
-            selectedIcon: Icon(Icons.menu_book),
-            label: 'Listahan',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.inventory_2_outlined),
-            selectedIcon: Icon(Icons.inventory_2),
-            label: 'Inventory',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.analytics_outlined),
-            selectedIcon: Icon(Icons.analytics),
-            label: 'Analytics',
-          ),
-        ],
-      ),
+      bottomNavigationBar: isOwner 
+        ? NavigationBar(
+            selectedIndex: _index,
+            onDestinationSelected: (int value) =>
+                setState(() => _index = value),
+            destinations: const <NavigationDestination>[
+              NavigationDestination(
+                icon: Icon(Icons.point_of_sale_outlined),
+                selectedIcon: Icon(Icons.point_of_sale),
+                label: 'POS',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.menu_book_outlined),
+                selectedIcon: Icon(Icons.menu_book),
+                label: 'Listahan',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.inventory_2_outlined),
+                selectedIcon: Icon(Icons.inventory_2),
+                label: 'Inventory',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.analytics_outlined),
+                selectedIcon: Icon(Icons.analytics),
+                label: 'Analytics',
+              ),
+            ],
+          )
+        : null, // Cashier has no bottom nav since they only have 1 screen
     );
   }
 }

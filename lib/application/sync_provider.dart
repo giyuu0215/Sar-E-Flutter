@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
@@ -105,6 +106,10 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
 
   Future<void> _drain() async {
     try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      final String? storeId = prefs.getString('storeId');
+      if (storeId == null) return; // Cannot sync without tenant isolation
+
       final Database db = await AppDatabase.instance;
       final List<Map<String, dynamic>> pending = await db.rawQuery(
         "SELECT * FROM sync_queue WHERE status = 'pending' AND retry_count < $_maxRetries ORDER BY created_at ASC LIMIT 50",
@@ -117,6 +122,7 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
       }
 
       final FirebaseFirestore firestore = FirebaseFirestore.instance;
+      final DocumentReference<Map<String, dynamic>> storeRef = firestore.collection('stores').doc(storeId);
 
       for (final Map<String, dynamic> row in pending) {
         final String queueId = row['queue_id'] as String;
@@ -128,10 +134,12 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
 
         try {
           final DocumentReference<Map<String, dynamic>> ref =
-              firestore.collection(entityType).doc(entityId);
+              storeRef.collection(entityType).doc(entityId);
           if (operation == 'delete') {
             await ref.delete();
           } else {
+            // Include server timestamp for potential future pull syncs
+            payload['server_updated_at'] = FieldValue.serverTimestamp();
             await ref.set(payload, SetOptions(merge: true));
           }
 

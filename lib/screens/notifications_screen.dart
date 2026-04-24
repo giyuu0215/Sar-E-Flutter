@@ -68,12 +68,16 @@ class NotificationsScreen extends ConsumerWidget {
                           title: Text(p.name),
                           subtitle: Text(
                               'Stock: ${p.stockQty} (threshold: ${p.threshold})'),
-                          trailing: Text(
-                            'Restock!',
-                            style: TextStyle(
-                                color: c.warning,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 12),
+                          trailing: TextButton.icon(
+                            onPressed: () {
+                              Navigator.pop(context);
+                              // User can then manually navigate to Inventory tab
+                            },
+                            icon: const Icon(Icons.inventory_2, size: 16),
+                            label: const Text('Restock'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: c.warning,
+                            ),
                           ),
                         ),
                       )),
@@ -105,6 +109,27 @@ class NotificationsScreen extends ConsumerWidget {
                                     TextStyle(color: c.error, fontSize: 12),
                               ),
                             ],
+                          ),
+                          trailing: IconButton(
+                            onPressed: () async {
+                              // Re-using the SMS feature from listahan
+                              final Uri smsLaunchUri = Uri(
+                                scheme: 'sms',
+                                path: '09123456789', // Would use e.customerPhone if we added it to customer table
+                                queryParameters: <String, String>{
+                                  'body':
+                                      'Hi ${e.customerName}, this is a gentle reminder regarding your overdue credit of PHP ${e.remaining.toStringAsFixed(2)} at our store. Please settle it as soon as possible.',
+                                },
+                              );
+                              // We just rely on the existing url_launcher in listahan if they navigate,
+                              // but here we can just show a snackbar redirecting them
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Go to Listahan to send SMS reminders.')),
+                              );
+                              Navigator.pop(context);
+                            },
+                            icon: Icon(Icons.sms_outlined, color: c.error),
+                            tooltip: 'Remind via SMS',
                           ),
                           isThreeLine: true,
                         ),

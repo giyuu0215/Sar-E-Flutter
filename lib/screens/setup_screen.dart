@@ -74,6 +74,7 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
   Widget build(BuildContext context) {
     final AppColors c = appColors(context);
     final bool dark = Theme.of(context).brightness == Brightness.dark;
+    final AuthState auth = ref.watch(authProvider).value ?? const AuthState();
 
     return Scaffold(
       body: LiquidBackground(
@@ -206,33 +207,88 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                               ),
                             ),
                           ],
-                          const SizedBox(height: 20),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton(
-                              onPressed: _isLoading ? null : _submit,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: c.primary,
-                                foregroundColor:
-                                    dark ? const Color(0xFF0D1117) : Colors.white,
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 14),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14),
+                          if (auth.storeId == null) ...<Widget>[
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: auth.isLoading
+                                    ? null
+                                    : () async {
+                                        await ref
+                                            .read(authProvider.notifier)
+                                            .linkStoreWithGoogle();
+                                      },
+                                icon: const Icon(Icons.login),
+                                label: auth.isLoading
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.white))
+                                    : const Text('Sign in with Google to Link Store',
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.w700)),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF4285F4), // Google Blue
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
                                 ),
                               ),
-                              child: _isLoading
-                                  ? const SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: Colors.white))
-                                  : const Text('Create Account',
-                                      style: TextStyle(
-                                          fontWeight: FontWeight.w700)),
                             ),
-                          ),
+                          ] else ...<Widget>[
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: c.primary.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: c.primary.withValues(alpha: 0.3)),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.check_circle, color: c.primary),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'Store Linked! Now set your offline PIN.',
+                                      style: TextStyle(
+                                          color: c.primary, fontWeight: FontWeight.w600),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton(
+                                onPressed: _isLoading ? null : _submit,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: c.primary,
+                                  foregroundColor:
+                                      dark ? const Color(0xFF0D1117) : Colors.white,
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 14),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                ),
+                                child: _isLoading
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.white))
+                                    : const Text('Complete Setup',
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.w700)),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
