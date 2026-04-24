@@ -1,259 +1,337 @@
-import 'package:flutter/material.dart';
+import 'dart:convert';
 
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
+
+import '../application/listahan_provider.dart';
+import '../domain/entities/credit_entry.dart';
+import '../domain/entities/customer.dart';
 import '../theme/app_theme.dart';
 
-class CreditEntry {
-  const CreditEntry({
-    required this.id,
-    required this.customerName,
-    required this.phone,
-    required this.items,
-    required this.amount,
-    required this.amountPaid,
-    required this.status,
-    required this.notes,
-  });
-
-  final String id;
-  final String customerName;
-  final String phone;
-  final String items;
-  final double amount;
-  final double amountPaid;
-  final String status;
-  final String notes;
-
-  double get remaining => amount - amountPaid;
-
-  CreditEntry copyWith({double? amountPaid, String? status}) {
-    return CreditEntry(
-      id: id,
-      customerName: customerName,
-      phone: phone,
-      items: items,
-      amount: amount,
-      amountPaid: amountPaid ?? this.amountPaid,
-      status: status ?? this.status,
-      notes: notes,
-    );
-  }
-}
-
-class ListahanScreen extends StatefulWidget {
+class ListahanScreen extends ConsumerWidget {
   const ListahanScreen({super.key});
 
   @override
-  State<ListahanScreen> createState() => _ListahanScreenState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    return ref.watch(listahanProvider).when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (Object e, _) => Center(child: Text('Error: $e')),
+          data: (ListahanState state) => _ListahanContent(state: state),
+        );
+  }
 }
 
-class _ListahanScreenState extends State<ListahanScreen> {
-  final List<CreditEntry> _entries = <CreditEntry>[
-    const CreditEntry(
-      id: '1',
-      customerName: 'Mrs. Santos',
-      phone: '09171234567',
-      items: 'Lucky Me x5, Nescafe x10',
-      amount: 142.5,
-      amountPaid: 0,
-      status: 'overdue',
-      notes: 'Always pays on Saturday',
-    ),
-    const CreditEntry(
-      id: '2',
-      customerName: 'Mr. Cruz',
-      phone: '09281234567',
-      items: 'Century Tuna x3, Skyflakes x4',
-      amount: 119.5,
-      amountPaid: 50,
-      status: 'active',
-      notes: '',
-    ),
-    const CreditEntry(
-      id: '3',
-      customerName: 'Mrs. Reyes',
-      phone: '09561234567',
-      items: 'Bear Brand x6, Yakult x5',
-      amount: 143.5,
-      amountPaid: 143.5,
-      status: 'settled',
-      notes: 'Always pays early',
-    ),
-    const CreditEntry(
-      id: '4',
-      customerName: 'Ms. Dela Torre',
-      phone: '09391234567',
-      items: 'Oishi Prawn x8, Century Tuna x2',
-      amount: 177,
-      amountPaid: 100,
-      status: 'active',
-      notes: '',
-    ),
-    const CreditEntry(
-      id: '5',
-      customerName: 'Mr. Manalo',
-      phone: '09221234567',
-      items: 'Purefoods Corned Beef x4, Lucky Me x10',
-      amount: 238,
-      amountPaid: 0,
-      status: 'overdue',
-      notes: 'Not answering calls',
-    ),
-  ];
+class _ListahanContent extends ConsumerStatefulWidget {
+  const _ListahanContent({required this.state});
 
-  final TextEditingController _payController = TextEditingController();
-  String _activeTab = 'all';
-  String? _expandedId;
+  final ListahanState state;
 
   @override
-  void dispose() {
-    _payController.dispose();
-    super.dispose();
+  ConsumerState<_ListahanContent> createState() => _ListahanContentState();
+}
+
+class _ListahanContentState extends ConsumerState<_ListahanContent> {
+  void _showMessage(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
+    );
   }
 
-  List<CreditEntry> get _filtered {
-    if (_activeTab == 'all') {
-      return _entries;
-    }
-    return _entries.where((CreditEntry e) => e.status == _activeTab).toList();
-  }
+  Future<void> _openAddCreditDialog() async {
+    Customer? selectedCustomer;
+    final TextEditingController customerSearchCtrl =
+        TextEditingController();
+    List<Customer> searchResults = List<Customer>.from(widget.state.customers);
+    final TextEditingController itemsCtrl = TextEditingController();
+    final TextEditingController amountCtrl = TextEditingController();
+    DateTime dueDate = DateTime.now().add(const Duration(days: 7));
 
-  int get _activeCount =>
-      _entries.where((CreditEntry e) => e.status == 'active').length;
-  int get _overdueCount =>
-      _entries.where((CreditEntry e) => e.status == 'overdue').length;
-  double get _totalOutstanding => _entries
-      .where((CreditEntry e) => e.status != 'settled')
-      .fold<double>(0, (double s, CreditEntry e) => s + e.remaining);
-
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          duration: const Duration(milliseconds: 1300),
-        ),
-      );
-  }
-
-  void _sendSmsReminder(CreditEntry entry) {
-    _showMessage('SMS reminder sent to ${entry.customerName}!');
-  }
-
-  void _recordPayment(CreditEntry entry) {
-    _payController.clear();
-    showModalBottomSheet<void>(
+    await showDialog<void>(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: appColors(context).surface,
-      builder: (BuildContext context) {
-        final AppColors c = appColors(context);
-        return Padding(
-          padding: EdgeInsets.only(
-            left: 18,
-            right: 18,
-            top: 18,
-            bottom: MediaQuery.of(context).viewInsets.bottom + 18,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Row(
-                children: <Widget>[
-                  const Expanded(
-                    child: Text(
-                      'Record Payment',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 18,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close),
-                  ),
-                ],
-              ),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: c.surfaceMuted,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: c.border),
-                ),
+      builder: (BuildContext ctx) {
+        return StatefulBuilder(
+          builder: (_, StateSetter setS) {
+            return AlertDialog(
+              title: const Text('New Credit Entry'),
+              content: SingleChildScrollView(
                 child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    Text(
-                      entry.customerName,
-                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    // Customer search/select
+                    if (selectedCustomer == null) ...<Widget>[
+                      TextField(
+                        controller: customerSearchCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Search customer',
+                          prefixIcon: Icon(Icons.person_search_outlined),
+                        ),
+                        onChanged: (String v) async {
+                          if (v.isEmpty) {
+                            setS(() => searchResults =
+                                List<Customer>.from(widget.state.customers));
+                          } else {
+                            final List<Customer> results = await ref
+                                .read(listahanProvider.notifier)
+                                .searchCustomers(v);
+                            setS(() => searchResults = results);
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 6),
+                      if (searchResults.isNotEmpty)
+                        Container(
+                          constraints: const BoxConstraints(maxHeight: 120),
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                                color: appColors(ctx).border),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: ListView.builder(
+                            shrinkWrap: true,
+                            itemCount: searchResults.length,
+                            itemBuilder: (_, int i) => ListTile(
+                              dense: true,
+                              title: Text(searchResults[i].name),
+                              subtitle:
+                                  Text(searchResults[i].mobileNumber ?? ''),
+                              onTap: () => setS(
+                                  () => selectedCustomer = searchResults[i]),
+                            ),
+                          ),
+                        ),
+                      TextButton.icon(
+                        onPressed: () async {
+                          final Customer? newCustomer =
+                              await _showAddCustomerDialog(ctx);
+                          if (newCustomer != null) {
+                            setS(() => selectedCustomer = newCustomer);
+                          }
+                        },
+                        icon: const Icon(Icons.add),
+                        label: const Text('New customer'),
+                      ),
+                    ] else ...<Widget>[
+                      Row(
+                        children: <Widget>[
+                          Icon(Icons.person, color: appColors(ctx).primary),
+                          const SizedBox(width: 8),
+                          Expanded(
+                              child: Text(selectedCustomer!.name,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w600))),
+                          IconButton(
+                            icon: const Icon(Icons.close, size: 16),
+                            onPressed: () =>
+                                setS(() => selectedCustomer = null),
+                          ),
+                        ],
+                      ),
+                    ],
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: itemsCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Items (comma separated)',
+                        hintText: 'e.g. Lucky Me x5, Bear Brand x2',
+                      ),
                     ),
-                    Text(
-                      'Total: PHP ${entry.amount.toStringAsFixed(2)}',
-                      style: TextStyle(color: c.textSecondary),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: amountCtrl,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: <TextInputFormatter>[
+                        FilteringTextInputFormatter.allow(
+                            RegExp(r'^\d+\.?\d{0,2}'))
+                      ],
+                      decoration: const InputDecoration(
+                        labelText: 'Amount (PHP) *',
+                        prefixText: '₱ ',
+                      ),
                     ),
-                    Text(
-                      'Paid: PHP ${entry.amountPaid.toStringAsFixed(2)}',
-                      style: TextStyle(color: c.textSecondary),
-                    ),
-                    Text(
-                      'Remaining: PHP ${entry.remaining.toStringAsFixed(2)}',
-                      style: TextStyle(
-                        color: c.error,
-                        fontWeight: FontWeight.w700,
+                    const SizedBox(height: 10),
+                    // Due date picker
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.calendar_today_outlined),
+                      title: Text(
+                          'Due: ${DateFormat('MMM d, y').format(dueDate)}'),
+                      trailing: TextButton(
+                        onPressed: () async {
+                          final DateTime? picked = await showDatePicker(
+                            context: ctx,
+                            initialDate: dueDate,
+                            firstDate: DateTime.now(),
+                            lastDate:
+                                DateTime.now().add(const Duration(days: 365)),
+                          );
+                          if (picked != null) setS(() => dueDate = picked);
+                        },
+                        child: const Text('Change'),
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _payController,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                textAlign: TextAlign.right,
-                decoration: InputDecoration(
-                  hintText: 'Max: PHP ${entry.remaining.toStringAsFixed(2)}',
-                ),
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    final double amount =
-                        double.tryParse(_payController.text) ?? 0;
-                    if (amount <= 0) {
+              actions: <Widget>[
+                TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Cancel')),
+                ElevatedButton(
+                  onPressed: () async {
+                    if (selectedCustomer == null) {
                       return;
                     }
-                    setState(() {
-                      final int idx = _entries.indexWhere(
-                        (CreditEntry e) => e.id == entry.id,
-                      );
-                      if (idx >= 0) {
-                        final double nextPaid =
-                            (_entries[idx].amountPaid + amount).clamp(
-                              0,
-                              _entries[idx].amount,
-                            );
-                        _entries[idx] = _entries[idx].copyWith(
-                          amountPaid: nextPaid,
-                          status: nextPaid >= _entries[idx].amount
-                              ? 'settled'
-                              : _entries[idx].status,
+                    final double amount =
+                        double.tryParse(amountCtrl.text) ?? 0;
+                    if (amount <= 0) return;
+                    final List<String> items = itemsCtrl.text
+                        .split(',')
+                        .map((String s) => s.trim())
+                        .where((String s) => s.isNotEmpty)
+                        .toList();
+                    Navigator.pop(ctx);
+                    await ref
+                        .read(listahanProvider.notifier)
+                        .addCreditEntry(
+                          customerId: selectedCustomer!.customerId,
+                          items: items,
+                          amount: amount,
+                          dueDate: dueDate,
                         );
-                      }
-                    });
-                    Navigator.pop(context);
+                    _showMessage('Credit entry added');
                   },
-                  child: const Text('Confirm Payment'),
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: appColors(ctx).primary,
+                      foregroundColor: Colors.white),
+                  child: const Text('Add'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<Customer?> _showAddCustomerDialog(BuildContext ctx) async {
+    final TextEditingController nameCtrl = TextEditingController();
+    final TextEditingController mobileCtrl = TextEditingController();
+    return showDialog<Customer>(
+      context: ctx,
+      builder: (BuildContext ctx2) {
+        return AlertDialog(
+          title: const Text('New Customer'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              TextField(
+                  controller: nameCtrl,
+                  decoration:
+                      const InputDecoration(labelText: 'Name *')),
+              const SizedBox(height: 10),
+              TextField(
+                controller: mobileCtrl,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(
+                  labelText: 'Mobile (optional)',
+                  hintText: '09xxxxxxxxx',
                 ),
               ),
             ],
           ),
+          actions: <Widget>[
+            TextButton(
+                onPressed: () => Navigator.pop(ctx2),
+                child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () async {
+                if (nameCtrl.text.trim().isEmpty) return;
+                final NavigatorState nav = Navigator.of(ctx2);
+                final NavigatorState parentNav = Navigator.of(ctx);
+                nav.pop();
+                final Customer c =
+                    await ref.read(listahanProvider.notifier).addCustomer(
+                          nameCtrl.text.trim(),
+                          mobile: mobileCtrl.text.trim().isEmpty
+                              ? null
+                              : mobileCtrl.text.trim(),
+                        );
+                parentNav.pop(c);
+              },
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: appColors(ctx2).primary,
+                  foregroundColor: Colors.white),
+              child: const Text('Create'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showRepayDialog(CreditEntry entry) async {
+    final TextEditingController amountCtrl = TextEditingController();
+    final TextEditingController notesCtrl = TextEditingController();
+
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext ctx) {
+        return AlertDialog(
+          title: Text('Repayment – ${entry.customerName}'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Text(
+                'Outstanding: PHP ${entry.remaining.toStringAsFixed(2)}',
+                style: TextStyle(
+                    color: appColors(ctx).primary,
+                    fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: amountCtrl,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'Amount paid (PHP) *',
+                  prefixText: '₱ ',
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: notesCtrl,
+                decoration: const InputDecoration(labelText: 'Notes (optional)'),
+              ),
+            ],
+          ),
+          actions: <Widget>[
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () async {
+                final double amount =
+                    double.tryParse(amountCtrl.text) ?? 0;
+                if (amount <= 0) return;
+                Navigator.pop(ctx);
+                await ref
+                    .read(listahanProvider.notifier)
+                    .recordRepayment(entry.entryId, amount,
+                        notes: notesCtrl.text.isNotEmpty
+                            ? notesCtrl.text
+                            : null);
+                _showMessage('Repayment recorded');
+              },
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: appColors(ctx).primary,
+                  foregroundColor: Colors.white),
+              child: const Text('Record'),
+            ),
+          ],
         );
       },
     );
@@ -262,242 +340,269 @@ class _ListahanScreenState extends State<ListahanScreen> {
   @override
   Widget build(BuildContext context) {
     final AppColors c = appColors(context);
+    final ListahanState state = widget.state;
+    final List<CreditEntry> filtered = state.filtered;
+
+    final List<String> filters = <String>[
+      'All',
+      'active',
+      'overdue',
+      'settled',
+    ];
+
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 90),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
+          // Header
           Row(
             children: <Widget>[
-              const Icon(Icons.menu_book_rounded),
+              const Icon(Icons.menu_book_outlined),
               const SizedBox(width: 8),
-              Text(
-                'Credit Ledger',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
+              Text('Listahan',
+                  style: Theme.of(context).textTheme.titleLarge),
               const Spacer(),
               ElevatedButton.icon(
-                onPressed: () {},
-                icon: const Icon(Icons.add),
-                label: const Text('Credit'),
+                onPressed: _openAddCreditDialog,
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('Add'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: c.primary,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
+                      borderRadius: BorderRadius.circular(16)),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 10),
-          Row(
-            children: <Widget>[
-              _MiniStat(
-                title: 'Active',
-                value: '$_activeCount',
-                color: c.primary,
-              ),
-              const SizedBox(width: 8),
-              _MiniStat(
-                title: 'Overdue',
-                value: '$_overdueCount',
-                color: c.warning,
-              ),
-              const SizedBox(width: 8),
-              _MiniStat(
-                title: 'Outstanding',
-                value: 'PHP ${_totalOutstanding.toStringAsFixed(0)}',
-                color: c.error,
-              ),
-            ],
-          ),
-          if (_overdueCount > 0) ...<Widget>[
-            const SizedBox(height: 10),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: c.warning.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: c.warning.withValues(alpha: 0.35)),
-              ),
-              child: Text(
-                '$_overdueCount account(s) are overdue. Send reminders.',
-                style: TextStyle(color: c.warning, fontWeight: FontWeight.w700),
-              ),
+
+          // Stats row
+          Row(children: <Widget>[
+            _StatCard(
+              label: 'Entries',
+              value: '${state.entries.length}',
+              color: c.primary,
             ),
-          ],
+            const SizedBox(width: 8),
+            _StatCard(
+              label: 'Overdue',
+              value: '${state.overdueCount}',
+              color: c.error,
+            ),
+            const SizedBox(width: 8),
+            _StatCard(
+              label: 'Outstanding',
+              value: 'PHP ${(state.totalOutstanding / 1000).toStringAsFixed(1)}k',
+              color: c.warning,
+            ),
+          ]),
           const SizedBox(height: 10),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: <String>['all', 'active', 'overdue', 'settled'].map((
-                String tab,
-              ) {
-                final bool selected = _activeTab == tab;
+
+          // Search
+          TextField(
+            onChanged: (String v) =>
+                ref.read(listahanProvider.notifier).setSearch(v),
+            decoration: const InputDecoration(
+              prefixIcon: Icon(Icons.search),
+              hintText: 'Search customer...',
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // Status filter chips
+          SizedBox(
+            height: 38,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: filters.asMap().entries.map((MapEntry<int, String> e) {
+                final String filter = e.value;
+                final String? filterVal =
+                    filter == 'All' ? null : filter;
+                final bool selected = state.filterStatus == filterVal;
                 return Padding(
                   padding: const EdgeInsets.only(right: 6),
-                  child: SizedBox(
-                    width: 112,
-                    child: OutlinedButton(
-                      onPressed: () => setState(() => _activeTab = tab),
-                      style: OutlinedButton.styleFrom(
-                        backgroundColor: selected ? c.primary : c.surfaceMuted,
-                        foregroundColor: selected
-                            ? Colors.white
-                            : c.textSecondary,
-                        side: BorderSide(
-                          color: selected ? c.primary : c.border,
-                        ),
-                      ),
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          tab[0].toUpperCase() + tab.substring(1),
-                          maxLines: 1,
-                          softWrap: false,
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ),
+                  child: ChoiceChip(
+                    label: Text(filter[0].toUpperCase() +
+                        filter.substring(1)),
+                    selected: selected,
+                    onSelected: (_) => ref
+                        .read(listahanProvider.notifier)
+                        .setFilter(filterVal),
+                    selectedColor: c.primary.withValues(alpha: 0.15),
+                    side: BorderSide(
+                        color: selected ? c.primary : c.border),
                   ),
                 );
               }).toList(),
             ),
           ),
-          const SizedBox(height: 8),
-          ..._filtered.map((CreditEntry entry) {
-            final bool expanded = _expandedId == entry.id;
-            final double paidPct = entry.amount == 0
-                ? 0
-                : (entry.amountPaid / entry.amount).clamp(0, 1);
-            final Color statusColor = switch (entry.status) {
-              'active' => c.primary,
-              'overdue' => c.warning,
-              _ => c.info,
-            };
-            return Card(
-              margin: const EdgeInsets.only(bottom: 10),
-              child: GestureDetector(
-                onTap: () =>
-                    setState(() => _expandedId = expanded ? null : entry.id),
+          const SizedBox(height: 10),
+
+          if (filtered.isEmpty)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 30),
+                child: Text('No credit entries',
+                    style: TextStyle(color: c.textSecondary)),
+              ),
+            )
+          else
+            ...filtered.map((CreditEntry entry) {
+              final bool overdue = entry.isOverdue;
+              final bool settled = entry.isSettled;
+              final Color statusColor = settled
+                  ? c.info
+                  : overdue
+                      ? c.error
+                      : c.primary;
+              final String statusLabel =
+                  entry.status[0].toUpperCase() + entry.status.substring(1);
+
+              List<String> items = <String>[];
+              try {
+                final dynamic decoded = jsonDecode(entry.items);
+                if (decoded is List<dynamic>) {
+                  items = decoded.cast<String>();
+                }
+              } catch (_) {
+                items = <String>[entry.items];
+              }
+
+              return Card(
+                margin: const EdgeInsets.only(bottom: 10),
                 child: Padding(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(14),
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      Row(
-                        children: <Widget>[
-                          CircleAvatar(
-                            backgroundColor: statusColor.withValues(
-                              alpha: 0.15,
-                            ),
-                            child: Icon(Icons.person, color: statusColor),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: <Widget>[
-                                Text(
-                                  entry.customerName,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  entry.status.toUpperCase(),
-                                  style: TextStyle(
-                                    color: statusColor,
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: <Widget>[
-                              Text(
-                                'PHP ${entry.remaining.toStringAsFixed(2)}',
-                                style: TextStyle(
-                                  color: c.primary,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                              Text(
-                                'of PHP ${entry.amount.toStringAsFixed(2)}',
-                                style: TextStyle(
-                                  color: c.textTertiary,
-                                  fontSize: 11,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                      if (expanded) ...<Widget>[
-                        const SizedBox(height: 10),
-                        LinearProgressIndicator(
-                          value: paidPct,
-                          minHeight: 7,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        const SizedBox(height: 8),
-                        Align(
-                          alignment: Alignment.centerLeft,
+                      Row(children: <Widget>[
+                        Expanded(
                           child: Text(
-                            entry.items,
-                            style: TextStyle(color: c.textSecondary),
+                            entry.customerName ?? 'Unknown',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 16),
                           ),
                         ),
-                        const SizedBox(height: 8),
-                        Row(
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: statusColor.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                                color: statusColor.withValues(alpha: 0.4)),
+                          ),
+                          child: Text(
+                            statusLabel,
+                            style: TextStyle(
+                                color: statusColor,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                      ]),
+                      if (entry.customerPhone != null) ...<Widget>[
+                        const SizedBox(height: 2),
+                        Text(entry.customerPhone!,
+                            style: TextStyle(
+                                color: c.textSecondary, fontSize: 12)),
+                      ],
+                      const SizedBox(height: 6),
+                      if (items.isNotEmpty)
+                        Text(items.join(', '),
+                            style: TextStyle(
+                                color: c.textSecondary, fontSize: 13),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis),
+                      const SizedBox(height: 8),
+                      Row(children: <Widget>[
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: <Widget>[
-                            Expanded(
-                              child: ElevatedButton.icon(
-                                onPressed: entry.status == 'settled'
-                                    ? null
-                                    : () => _recordPayment(entry),
-                                icon: const Icon(
-                                  Icons.account_balance_wallet_outlined,
-                                ),
-                                label: const Text('Pay'),
-                              ),
+                            Text(
+                              'PHP ${entry.remaining.toStringAsFixed(2)} remaining',
+                              style: TextStyle(
+                                  color: statusColor,
+                                  fontWeight: FontWeight.w700),
                             ),
-                            const SizedBox(width: 8),
-                            IconButton.filledTonal(
-                              onPressed: entry.status == 'settled'
-                                  ? null
-                                  : () => _sendSmsReminder(entry),
-                              icon: const Icon(Icons.sms_outlined),
-                              tooltip: 'Send SMS reminder',
+                            Text(
+                              'Due: ${DateFormat('MMM d').format(entry.dueDate)}',
+                              style: TextStyle(
+                                  color: c.textSecondary, fontSize: 12),
                             ),
                           ],
+                        ),
+                        const Spacer(),
+                        // Progress bar
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: <Widget>[
+                            Text(
+                              '${((entry.amountPaid / entry.amount) * 100).round()}% paid',
+                              style: TextStyle(
+                                  color: c.textSecondary, fontSize: 11),
+                            ),
+                            const SizedBox(height: 4),
+                            SizedBox(
+                              width: 80,
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(4),
+                                child: LinearProgressIndicator(
+                                  value:
+                                      entry.amountPaid / entry.amount,
+                                  minHeight: 6,
+                                  backgroundColor:
+                                      c.border,
+                                  valueColor:
+                                      AlwaysStoppedAnimation<Color>(
+                                          statusColor),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ]),
+                      if (!settled) ...<Widget>[
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton(
+                            onPressed: () =>
+                                _showRepayDialog(entry),
+                            style: OutlinedButton.styleFrom(
+                              side: BorderSide(color: c.primary),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius:
+                                      BorderRadius.circular(10)),
+                            ),
+                            child: Text('Record Payment',
+                                style:
+                                    TextStyle(color: c.primary)),
+                          ),
                         ),
                       ],
                     ],
                   ),
                 ),
-              ),
-            );
-          }),
+              );
+            }),
         ],
       ),
     );
   }
 }
 
-class _MiniStat extends StatelessWidget {
-  const _MiniStat({
-    required this.title,
+class _StatCard extends StatelessWidget {
+  const _StatCard({
+    required this.label,
     required this.value,
     required this.color,
   });
 
-  final String title;
+  final String label;
   final String value;
   final Color color;
 
@@ -515,12 +620,13 @@ class _MiniStat extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Text(
-              value,
-              style: TextStyle(color: color, fontWeight: FontWeight.w800),
-            ),
+            Text(value,
+                style:
+                    TextStyle(color: color, fontWeight: FontWeight.w800)),
             const SizedBox(height: 2),
-            Text(title, style: TextStyle(color: c.textSecondary, fontSize: 11)),
+            Text(label,
+                style:
+                    TextStyle(color: c.textSecondary, fontSize: 11)),
           ],
         ),
       ),

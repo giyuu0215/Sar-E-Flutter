@@ -1,231 +1,314 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../application/inventory_provider.dart';
+import '../domain/entities/category.dart';
+import '../domain/entities/product.dart';
 import '../theme/app_theme.dart';
 
-class Product {
-  const Product({
-    required this.id,
-    required this.name,
-    required this.category,
-    required this.price,
-    required this.suggestedPrice,
-    required this.stock,
-    required this.minStock,
-  });
+class InventoryScreen extends ConsumerWidget {
+  const InventoryScreen({super.key});
 
-  final String id;
-  final String name;
-  final String category;
-  final double price;
-  final double suggestedPrice;
-  final int stock;
-  final int minStock;
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final AsyncValue<InventoryState> asyncState =
+        ref.watch(inventoryProvider);
 
-  Product copyWith({
-    String? name,
-    String? category,
-    double? price,
-    double? suggestedPrice,
-    int? stock,
-    int? minStock,
-  }) {
-    return Product(
-      id: id,
-      name: name ?? this.name,
-      category: category ?? this.category,
-      price: price ?? this.price,
-      suggestedPrice: suggestedPrice ?? this.suggestedPrice,
-      stock: stock ?? this.stock,
-      minStock: minStock ?? this.minStock,
+    return asyncState.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (Object e, _) => Center(child: Text('Error: $e')),
+      data: (InventoryState state) =>
+          _InventoryContent(state: state),
     );
   }
 }
 
-class InventoryScreen extends StatefulWidget {
-  const InventoryScreen({super.key});
+class _InventoryContent extends ConsumerStatefulWidget {
+  const _InventoryContent({required this.state});
+
+  final InventoryState state;
 
   @override
-  State<InventoryScreen> createState() => _InventoryScreenState();
+  ConsumerState<_InventoryContent> createState() =>
+      _InventoryContentState();
 }
 
-class _InventoryScreenState extends State<InventoryScreen> {
-  final List<Product> _products = <Product>[
-    const Product(
-      id: '1',
-      name: 'Lucky Me Pancit Canton',
-      category: 'Noodles',
-      price: 11,
-      suggestedPrice: 12,
-      stock: 180,
-      minStock: 40,
-    ),
-    const Product(
-      id: '2',
-      name: 'Bear Brand Milk Powder',
-      category: 'Dairy',
-      price: 13.5,
-      suggestedPrice: 14,
-      stock: 14,
-      minStock: 20,
-    ),
-    const Product(
-      id: '3',
-      name: 'Oishi Prawn Crackers',
-      category: 'Snacks',
-      price: 15,
-      suggestedPrice: 15,
-      stock: 310,
-      minStock: 60,
-    ),
-    const Product(
-      id: '4',
-      name: 'Century Tuna Regular',
-      category: 'Canned Goods',
-      price: 28.5,
-      suggestedPrice: 30,
-      stock: 95,
-      minStock: 25,
-    ),
-  ];
-
-  final List<String> _categories = <String>[
-    'All',
-    'Noodles',
-    'Dairy',
-    'Snacks',
-    'Canned Goods',
-  ];
-  String _activeCategory = 'All';
-  String _search = '';
-
-  List<Product> get _filtered {
-    return _products.where((Product p) {
-      final bool matchSearch = p.name.toLowerCase().contains(
-        _search.toLowerCase(),
-      );
-      final bool matchCat =
-          _activeCategory == 'All' || p.category == _activeCategory;
-      return matchSearch && matchCat;
-    }).toList();
+class _InventoryContentState extends ConsumerState<_InventoryContent> {
+  void _showMessage(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
+    );
   }
 
-  int get _lowStock =>
-      _products.where((Product p) => p.stock <= p.minStock).length;
-  double get _value => _products.fold<double>(
-    0,
-    (double s, Product p) => s + (p.price * p.stock),
-  );
+  Future<void> _openAddProductDialog() async {
+    final TextEditingController nameCtrl = TextEditingController();
+    final TextEditingController priceCtrl = TextEditingController();
+    final TextEditingController costCtrl = TextEditingController();
+    final TextEditingController stockCtrl = TextEditingController();
+    final TextEditingController thresholdCtrl =
+        TextEditingController(text: '5');
+    String? selectedCategoryId;
 
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          duration: const Duration(milliseconds: 1300),
-        ),
-      );
-  }
-
-  void _acceptAllSuggestedPrices() {
-    setState(() {
-      for (int i = 0; i < _products.length; i++) {
-        _products[i] = _products[i].copyWith(
-          price: _products[i].suggestedPrice,
-        );
-      }
-    });
-    _showMessage('All suggested prices accepted');
-  }
-
-  void _openAddDialog() {
-    final TextEditingController name = TextEditingController();
-    final TextEditingController price = TextEditingController();
-    final TextEditingController stock = TextEditingController();
-    String category = _categories.length > 1 ? _categories[1] : 'Snacks';
-
-    showDialog<void>(
+    await showDialog<void>(
       context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Add Product'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                TextField(
-                  controller: name,
-                  decoration: const InputDecoration(labelText: 'Product Name'),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: price,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  decoration: const InputDecoration(labelText: 'Price'),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: stock,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Stock'),
-                ),
-                const SizedBox(height: 8),
-                StatefulBuilder(
-                  builder: (_, StateSetter setS) {
-                    return DropdownButtonFormField<String>(
-                      initialValue: category,
-                      items: _categories
-                          .where((String c) => c != 'All')
-                          .map(
-                            (String c) => DropdownMenuItem<String>(
-                              value: c,
-                              child: Text(c),
-                            ),
-                          )
+      builder: (BuildContext ctx) {
+        return StatefulBuilder(
+          builder: (BuildContext ctx2, StateSetter setS) {
+            return AlertDialog(
+              title: const Text('Add Product'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    TextField(
+                        controller: nameCtrl,
+                        decoration:
+                            const InputDecoration(labelText: 'Product Name *')),
+                    const SizedBox(height: 10),
+                    Row(children: <Widget>[
+                      Expanded(
+                        child: TextField(
+                          controller: priceCtrl,
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
+                          decoration:
+                              const InputDecoration(labelText: 'Sell Price *'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: costCtrl,
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
+                          decoration:
+                              const InputDecoration(labelText: 'Cost Price'),
+                        ),
+                      ),
+                    ]),
+                    const SizedBox(height: 10),
+                    Row(children: <Widget>[
+                      Expanded(
+                        child: TextField(
+                          controller: stockCtrl,
+                          keyboardType: TextInputType.number,
+                          decoration:
+                              const InputDecoration(labelText: 'Stock Qty *'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: thresholdCtrl,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                              labelText: 'Low-stock Threshold'),
+                        ),
+                      ),
+                    ]),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedCategoryId,
+                      hint: const Text('Category (optional)'),
+                      items: widget.state.categories
+                          .map((Category cat) => DropdownMenuItem<String>(
+                                value: cat.categoryId,
+                                child: Text(cat.name),
+                              ))
                           .toList(),
-                      onChanged: (String? value) =>
-                          setS(() => category = value ?? category),
-                      decoration: const InputDecoration(labelText: 'Category'),
-                    );
+                      onChanged: (String? v) =>
+                          setS(() => selectedCategoryId = v),
+                      decoration:
+                          const InputDecoration(labelText: 'Category'),
+                    ),
+                  ],
+                ),
+              ),
+              actions: <Widget>[
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final double price =
+                        double.tryParse(priceCtrl.text) ?? 0;
+                    final double cost =
+                        double.tryParse(costCtrl.text) ?? 0;
+                    final int stock = int.tryParse(stockCtrl.text) ?? 0;
+                    final int threshold =
+                        int.tryParse(thresholdCtrl.text) ?? 5;
+                    if (nameCtrl.text.trim().isEmpty || price <= 0) {
+                      return;
+                    }
+                    Navigator.pop(ctx);
+                    await ref.read(inventoryProvider.notifier).addProduct(
+                          name: nameCtrl.text.trim(),
+                          unitPrice: price,
+                          costPrice: cost,
+                          stockQty: stock,
+                          threshold: threshold,
+                          categoryId: selectedCategoryId,
+                        );
+                    _showMessage('Product added');
                   },
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: appColors(ctx).primary,
+                      foregroundColor: Colors.white),
+                  child: const Text('Add'),
                 ),
               ],
-            ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _openEditDialog(Product product) async {
+    final TextEditingController priceCtrl =
+        TextEditingController(text: product.unitPrice.toString());
+    final TextEditingController costCtrl =
+        TextEditingController(text: product.costPrice.toString());
+    final TextEditingController stockCtrl =
+        TextEditingController(text: product.stockQty.toString());
+    final TextEditingController thresholdCtrl =
+        TextEditingController(text: product.threshold.toString());
+    String? selectedCategoryId = product.categoryId;
+
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext ctx) {
+        return StatefulBuilder(
+          builder: (_, StateSetter setS) {
+            return AlertDialog(
+              title: Text('Edit – ${product.name}'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Row(children: <Widget>[
+                      Expanded(
+                        child: TextField(
+                            controller: priceCtrl,
+                            keyboardType:
+                                const TextInputType.numberWithOptions(
+                                    decimal: true),
+                            decoration: const InputDecoration(
+                                labelText: 'Sell Price')),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                            controller: costCtrl,
+                            keyboardType:
+                                const TextInputType.numberWithOptions(
+                                    decimal: true),
+                            decoration: const InputDecoration(
+                                labelText: 'Cost Price')),
+                      ),
+                    ]),
+                    const SizedBox(height: 10),
+                    Row(children: <Widget>[
+                      Expanded(
+                        child: TextField(
+                            controller: stockCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration:
+                                const InputDecoration(labelText: 'Stock Qty')),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                            controller: thresholdCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                                labelText: 'Low-stock Threshold')),
+                      ),
+                    ]),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedCategoryId,
+                      hint: const Text('Category'),
+                      items: widget.state.categories
+                          .map((Category cat) => DropdownMenuItem<String>(
+                                value: cat.categoryId,
+                                child: Text(cat.name),
+                              ))
+                          .toList(),
+                      onChanged: (String? v) =>
+                          setS(() => selectedCategoryId = v),
+                    ),
+                  ],
+                ),
+              ),
+              actions: <Widget>[
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    Navigator.pop(ctx);
+                    await ref.read(inventoryProvider.notifier).updateProduct(
+                          product.copyWith(
+                            unitPrice:
+                                double.tryParse(priceCtrl.text) ??
+                                    product.unitPrice,
+                            costPrice:
+                                double.tryParse(costCtrl.text) ??
+                                    product.costPrice,
+                            stockQty:
+                                int.tryParse(stockCtrl.text) ??
+                                    product.stockQty,
+                            threshold:
+                                int.tryParse(thresholdCtrl.text) ??
+                                    product.threshold,
+                            categoryId: selectedCategoryId,
+                          ),
+                        );
+                    _showMessage('Product updated');
+                  },
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: appColors(ctx).primary,
+                      foregroundColor: Colors.white),
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _openAddCategoryDialog() async {
+    final TextEditingController nameCtrl = TextEditingController();
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext ctx) {
+        return AlertDialog(
+          title: const Text('New Category'),
+          content: TextField(
+            controller: nameCtrl,
+            decoration: const InputDecoration(labelText: 'Category Name'),
           ),
           actions: <Widget>[
             TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel')),
             ElevatedButton(
-              onPressed: () {
-                final double parsedPrice = double.tryParse(price.text) ?? 0;
-                final int parsedStock = int.tryParse(stock.text) ?? 0;
-                if (name.text.trim().isEmpty ||
-                    parsedPrice <= 0 ||
-                    parsedStock < 0) {
-                  _showMessage('Please fill required fields');
-                  return;
-                }
-                setState(() {
-                  _products.insert(
-                    0,
-                    Product(
-                      id: DateTime.now().microsecondsSinceEpoch.toString(),
-                      name: name.text.trim(),
-                      category: category,
-                      price: parsedPrice,
-                      suggestedPrice: parsedPrice,
-                      stock: parsedStock,
-                      minStock: 10,
-                    ),
-                  );
-                });
-                Navigator.pop(context);
-                _showMessage('Product added');
+              onPressed: () async {
+                if (nameCtrl.text.trim().isEmpty) return;
+                Navigator.pop(ctx);
+                await ref
+                    .read(inventoryProvider.notifier)
+                    .addCategory(nameCtrl.text.trim());
+                _showMessage('Category added');
               },
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: appColors(ctx).primary,
+                  foregroundColor: Colors.white),
               child: const Text('Add'),
             ),
           ],
@@ -237,79 +320,97 @@ class _InventoryScreenState extends State<InventoryScreen> {
   @override
   Widget build(BuildContext context) {
     final AppColors c = appColors(context);
+    final InventoryState state = widget.state;
+    final List<Product> filtered = state.filtered;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 90),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
+          // Header row
           Row(
             children: <Widget>[
               const Icon(Icons.inventory_2_outlined),
               const SizedBox(width: 8),
-              Text('Inventory', style: Theme.of(context).textTheme.titleLarge),
+              Text('Inventory',
+                  style: Theme.of(context).textTheme.titleLarge),
               const Spacer(),
+              IconButton(
+                onPressed: _openAddCategoryDialog,
+                icon: const Icon(Icons.label_outline),
+                tooltip: 'Add Category',
+              ),
               ElevatedButton.icon(
-                onPressed: _openAddDialog,
-                icon: const Icon(Icons.add),
+                onPressed: _openAddProductDialog,
+                icon: const Icon(Icons.add, size: 16),
                 label: const Text('Add'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: c.primary,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
+                      borderRadius: BorderRadius.circular(16)),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 10),
+
+          // Stats
           Row(
             children: <Widget>[
               _StatCard(
-                label: 'Products',
-                value: '${_products.length}',
-                color: c.primary,
-              ),
+                  label: 'Products',
+                  value: '${state.products.length}',
+                  color: c.primary),
               const SizedBox(width: 8),
               _StatCard(
-                label: 'Low Stock',
-                value: '$_lowStock',
-                color: c.warning,
-              ),
+                  label: 'Low Stock',
+                  value: '${state.lowStockCount}',
+                  color: c.warning),
               const SizedBox(width: 8),
               _StatCard(
                 label: 'Value',
-                value: 'PHP ${(_value / 1000).toStringAsFixed(1)}k',
+                value: state.totalValue >= 1000
+                    ? 'PHP ${(state.totalValue / 1000).toStringAsFixed(1)}k'
+                    : 'PHP ${state.totalValue.toStringAsFixed(0)}',
                 color: c.info,
               ),
             ],
           ),
           const SizedBox(height: 10),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: c.warning.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: c.warning.withValues(alpha: 0.3)),
+
+          // Low-stock banner
+          if (state.lowStockCount > 0)
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: c.warning.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(14),
+                border:
+                    Border.all(color: c.warning.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: <Widget>[
+                  Icon(Icons.warning_amber_rounded,
+                      color: c.warning, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '${state.lowStockCount} product${state.lowStockCount == 1 ? '' : 's'} below restock threshold',
+                      style:
+                          TextStyle(color: c.warning, fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
             ),
-            child: Row(
-              children: <Widget>[
-                const Icon(Icons.sell_outlined, size: 16),
-                const SizedBox(width: 8),
-                const Expanded(
-                  child: Text('Suggested pricing available based on trend.'),
-                ),
-                TextButton(
-                  onPressed: _acceptAllSuggestedPrices,
-                  child: const Text('Accept All'),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
+          if (state.lowStockCount > 0) const SizedBox(height: 10),
+
+          // Search + category filter
           TextField(
-            onChanged: (String value) => setState(() => _search = value),
+            onChanged: (String v) =>
+                ref.read(inventoryProvider.notifier).setSearch(v),
             decoration: const InputDecoration(
               prefixIcon: Icon(Icons.search),
               hintText: 'Search product...',
@@ -318,76 +419,143 @@ class _InventoryScreenState extends State<InventoryScreen> {
           const SizedBox(height: 8),
           SizedBox(
             height: 38,
-            child: ListView.separated(
+            child: ListView(
               scrollDirection: Axis.horizontal,
-              itemCount: _categories.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 6),
-              itemBuilder: (BuildContext context, int i) {
-                final String cat = _categories[i];
-                final bool selected = _activeCategory == cat;
-                return ChoiceChip(
-                  label: Text(cat),
-                  selected: selected,
-                  onSelected: (_) => setState(() => _activeCategory = cat),
-                );
-              },
+              children: <Widget>[
+                _CategoryChip(
+                  label: 'All',
+                  selected: state.selectedCategory == null,
+                  onTap: () => ref
+                      .read(inventoryProvider.notifier)
+                      .setCategory(null),
+                ),
+                const SizedBox(width: 6),
+                ...state.categories.map((Category cat) => Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: _CategoryChip(
+                        label: cat.name,
+                        selected:
+                            state.selectedCategory == cat.categoryId,
+                        onTap: () => ref
+                            .read(inventoryProvider.notifier)
+                            .setCategory(cat.categoryId),
+                      ),
+                    )),
+              ],
             ),
           ),
           const SizedBox(height: 10),
-          ..._filtered.map((Product p) {
-            final bool low = p.stock <= p.minStock;
-            final bool belowSuggested = p.price < p.suggestedPrice;
-            return Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: low
-                      ? c.warning.withValues(alpha: 0.2)
-                      : c.primary.withValues(alpha: 0.18),
-                  child: Icon(
-                    low ? Icons.warning_amber_rounded : Icons.inventory,
-                    color: low ? c.warning : c.primary,
-                  ),
-                ),
-                title: Text(p.name),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    const SizedBox(height: 2),
-                    Text('${p.category} | Stock: ${p.stock}'),
-                    Text(
-                      'Price: PHP ${p.price.toStringAsFixed(2)}',
-                      style: TextStyle(
-                        color: c.primary,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    if (belowSuggested)
-                      Text(
-                        'Suggested: PHP ${p.suggestedPrice.toStringAsFixed(2)}',
-                        style: TextStyle(color: c.warning, fontSize: 12),
-                      ),
-                  ],
-                ),
-                trailing: belowSuggested
-                    ? TextButton(
-                        onPressed: () {
-                          setState(() {
-                            final int idx = _products.indexWhere(
-                              (Product x) => x.id == p.id,
-                            );
-                            _products[idx] = _products[idx].copyWith(
-                              price: _products[idx].suggestedPrice,
-                            );
-                          });
-                          _showMessage('Suggested price accepted');
-                        },
-                        child: const Text('Accept'),
-                      )
-                    : null,
+
+          // Product list
+          if (filtered.isEmpty)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 30),
+                child: Text('No products found',
+                    style: TextStyle(color: c.textSecondary)),
               ),
-            );
-          }),
+            )
+          else
+            ...filtered.map((Product p) {
+              final bool low = p.isLowStock;
+              final bool hasSuggestion =
+                  p.suggestedPrice != null &&
+                  p.suggestedPrice! > p.unitPrice;
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: low
+                        ? c.warning.withValues(alpha: 0.2)
+                        : c.primary.withValues(alpha: 0.18),
+                    child: Icon(
+                      low
+                          ? Icons.warning_amber_rounded
+                          : Icons.inventory_2_outlined,
+                      color: low ? c.warning : c.primary,
+                      size: 20,
+                    ),
+                  ),
+                  title: Text(p.name),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      const SizedBox(height: 2),
+                      Text(
+                          '${p.categoryName ?? 'Uncategorized'} | Stock: ${p.stockQty}'),
+                      Text(
+                        'PHP ${p.unitPrice.toStringAsFixed(2)}',
+                        style: TextStyle(
+                            color: c.primary,
+                            fontWeight: FontWeight.w700),
+                      ),
+                      if (hasSuggestion)
+                        Text(
+                          'Suggested: PHP ${p.suggestedPrice!.toStringAsFixed(2)}',
+                          style:
+                              TextStyle(color: c.warning, fontSize: 12),
+                        ),
+                    ],
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      if (hasSuggestion)
+                        TextButton(
+                          onPressed: () async {
+                            await ref
+                                .read(inventoryProvider.notifier)
+                                .acceptSuggestedPrice(
+                                    p.productId, p.suggestedPrice!);
+                            _showMessage('Price updated');
+                          },
+                          child: const Text('Accept',
+                              style: TextStyle(fontSize: 12)),
+                        ),
+                      IconButton(
+                        icon: Icon(Icons.edit_outlined,
+                            size: 18, color: c.textSecondary),
+                        onPressed: () => _openEditDialog(p),
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.delete_outline,
+                            size: 18, color: c.error),
+                        onPressed: () async {
+                          final bool? ok = await showDialog<bool>(
+                            context: context,
+                            builder: (_) => AlertDialog(
+                              title: const Text('Delete product?'),
+                              content: Text(
+                                  'Remove "${p.name}" from inventory?'),
+                              actions: <Widget>[
+                                TextButton(
+                                    onPressed: () =>
+                                        Navigator.pop(context, false),
+                                    child: const Text('Cancel')),
+                                ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                        backgroundColor: c.error,
+                                        foregroundColor: Colors.white),
+                                    onPressed: () =>
+                                        Navigator.pop(context, true),
+                                    child: const Text('Delete')),
+                              ],
+                            ),
+                          );
+                          if (ok == true) {
+                            await ref
+                                .read(inventoryProvider.notifier)
+                                .deleteProduct(p.productId);
+                            _showMessage('Product removed');
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                  isThreeLine: true,
+                ),
+              );
+            }),
         ],
       ),
     );
@@ -419,15 +587,38 @@ class _StatCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Text(
-              value,
-              style: TextStyle(color: color, fontWeight: FontWeight.w800),
-            ),
+            Text(value,
+                style: TextStyle(color: color, fontWeight: FontWeight.w800)),
             const SizedBox(height: 2),
-            Text(label, style: TextStyle(color: c.textSecondary, fontSize: 11)),
+            Text(label,
+                style: TextStyle(color: c.textSecondary, fontSize: 11)),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _CategoryChip extends StatelessWidget {
+  const _CategoryChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppColors c = appColors(context);
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: (_) => onTap(),
+      selectedColor: c.primary.withValues(alpha: 0.15),
+      side: BorderSide(color: selected ? c.primary : c.border),
     );
   }
 }

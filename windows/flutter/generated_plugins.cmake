@@ -3,7 +3,11 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  cloud_firestore
+  connectivity_plus
   dynamic_color
+  firebase_core
+  printing
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST

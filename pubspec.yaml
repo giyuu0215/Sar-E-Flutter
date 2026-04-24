@@ -1,22 +1,52 @@
 name: sare
-description: "A new Flutter project."
+description: "Sar-E – Smart POS & Store Manager for Filipino sari-sari stores."
 publish_to: 'none'
-version: 0.1.0+1
+version: 1.0.0+1
 
 environment:
-  sdk: ^3.11.5
+  sdk: ^3.5.0
 
 dependencies:
   flutter:
     sdk: flutter
-  google_fonts: ^8.0.2
+
+  # UI
+  google_fonts: ^6.2.1
   dynamic_color: ^1.7.0
+  qr_flutter: ^4.1.0
+
+  # State management
+  flutter_riverpod: ^2.6.1
+
+  # Local storage (offline-first)
+  sqflite: ^2.4.2
+  path: ^1.9.0
+
+  # Crypto / security
+  crypto: ^3.0.6
+  uuid: ^4.5.1
+
+  # Firebase (cloud sync)
+  firebase_core: ^3.13.0
+  cloud_firestore: ^5.6.6
+
+  # Network
+  connectivity_plus: ^6.1.4
+
+  # PDF export
+  pdf: ^3.11.3
+  printing: ^5.14.2
+
+  # Persistence (app settings)
+  shared_preferences: ^2.3.5
+
+  # Formatting
+  intl: ^0.20.2
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^6.0.0
-  cupertino_icons: ^1.0.8
+  flutter_lints: ^4.0.0
   flutter_launcher_icons: ^0.14.4
 
 flutter:
@@ -43,3 +73,4 @@ flutter_launcher_icons:
   macos:
     generate: true
     image_path: assets/images/sare_logo.png
+

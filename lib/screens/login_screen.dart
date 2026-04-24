@@ -1,272 +1,208 @@
-import 'package:flutter/material.dart';
 import 'dart:ui';
 
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../application/auth_provider.dart';
 import '../theme/app_theme.dart';
+import '../widgets/liquid_background.dart';
 
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({
-    super.key,
-    required this.onLogin,
-  });
-
-  final VoidCallback onLogin;
+class LoginScreen extends ConsumerStatefulWidget {
+  const LoginScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
-  bool _registerMode = false;
-  bool _showPassword = false;
-
-  final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
+class _LoginScreenState extends ConsumerState<LoginScreen> {
+  final TextEditingController _pinCtrl = TextEditingController();
+  bool _obscure = true;
 
   @override
   void dispose() {
-    _nameController.dispose();
-    _emailController.dispose();
-    _passwordController.dispose();
+    _pinCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_pinCtrl.text.trim().length < 4) return;
+    final bool ok = await ref
+        .read(authProvider.notifier)
+        .login(_pinCtrl.text.trim());
+    if (!ok && mounted) {
+      _pinCtrl.clear();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final AppColors c = appColors(context);
     final bool dark = Theme.of(context).brightness == Brightness.dark;
+    final AuthState auth = ref.watch(authProvider).value ?? const AuthState();
 
     return Scaffold(
-      body: Stack(
-        children: <Widget>[
-          Positioned(
-            left: -80,
-            top: -90,
-            child: _GlowCircle(
-              color: c.primary.withValues(alpha: dark ? 0.18 : 0.12),
-              size: 300,
-            ),
-          ),
-          Positioned(
-            right: -80,
-            bottom: -110,
-            child: _GlowCircle(
-              color: c.accent.withValues(alpha: dark ? 0.14 : 0.18),
-              size: 320,
-            ),
-          ),
-          SafeArea(
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 420),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      const SizedBox(height: 6),
-                      ClipRRect(
+      body: LiquidBackground(
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Column(
+              children: <Widget>[
+                const SizedBox(height: 60),
+                // Logo
+                Container(
+                  width: 90,
+                  height: 90,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(26),
+                    boxShadow: <BoxShadow>[
+                      BoxShadow(
+                        color: c.primary.withValues(alpha: 0.35),
+                        blurRadius: 40,
+                        spreadRadius: 8,
+                      ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(26),
+                    child: Image.asset('assets/images/sare_logo.png',
+                        fit: BoxFit.cover),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'SarE',
+                  style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                        fontWeight: FontWeight.w900,
+                        color: c.text,
+                      ),
+                ),
+                Text(
+                  'Smart POS for Retail Stores',
+                  style: TextStyle(
+                      color: c.textSecondary, fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 40),
+                // Login card
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(24),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+                    child: Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: c.surface.withValues(alpha: 0.8),
                         borderRadius: BorderRadius.circular(24),
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                          child: Container(
-                            width: 96,
-                            height: 96,
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: c.surface.withValues(alpha: 0.72),
-                              borderRadius: BorderRadius.circular(24),
-                              border: Border.all(color: c.border),
-                            ),
-                            alignment: Alignment.center,
-                            child: Image.asset(
-                              'assets/images/sare_logo.png',
-                              fit: BoxFit.contain,
+                        border: Border.all(color: c.border),
+                      ),
+                      child: Column(
+                        children: <Widget>[
+                          Text(
+                            'Enter PIN',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w700),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Enter your store PIN to continue',
+                            style: TextStyle(
+                                color: c.textSecondary, fontSize: 13),
+                          ),
+                          const SizedBox(height: 20),
+                          // PIN input
+                          TextField(
+                            controller: _pinCtrl,
+                            obscureText: _obscure,
+                            keyboardType: TextInputType.number,
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context)
+                                .textTheme
+                                .headlineSmall
+                                ?.copyWith(letterSpacing: 8),
+                            inputFormatters: <TextInputFormatter>[
+                              FilteringTextInputFormatter.digitsOnly,
+                              LengthLimitingTextInputFormatter(6),
+                            ],
+                            onSubmitted: (_) => _submit(),
+                            decoration: InputDecoration(
+                              hintText: '● ● ● ●',
+                              hintStyle: TextStyle(
+                                  letterSpacing: 8, color: c.textTertiary),
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  _obscure
+                                      ? Icons.visibility_off_outlined
+                                      : Icons.visibility_outlined,
+                                  color: c.textSecondary,
+                                ),
+                                onPressed: () =>
+                                    setState(() => _obscure = !_obscure),
+                              ),
                             ),
                           ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Smart POS for Retail Stores',
-                        style: TextStyle(
-                          color: c.textSecondary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(16),
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-                          child: Card(
-                            color: c.surface.withValues(alpha: 0.74),
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Column(
+                          if (auth.errorMessage != null) ...<Widget>[
+                            const SizedBox(height: 12),
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: c.error.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Row(
                                 children: <Widget>[
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      color: c.surfaceMuted,
-                                      borderRadius: BorderRadius.circular(14),
-                                      border: Border.all(color: c.border),
-                                    ),
-                                    child: Row(
-                                      children: <Widget>[
-                                        Expanded(
-                                          child: _AuthTabButton(
-                                            selected: !_registerMode,
-                                            label: 'Login',
-                                            onTap: () => setState(
-                                              () => _registerMode = false,
-                                            ),
-                                          ),
-                                        ),
-                                        Expanded(
-                                          child: _AuthTabButton(
-                                            selected: _registerMode,
-                                            label: 'Register',
-                                            onTap: () => setState(
-                                              () => _registerMode = true,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(height: 16),
-                                  if (_registerMode) ...<Widget>[
-                                    TextField(
-                                      controller: _nameController,
-                                      decoration: const InputDecoration(
-                                        labelText: 'Owner Name',
-                                        hintText: 'John Doe',
-                                      ),
-                                    ),
-                                    const SizedBox(height: 10),
-                                  ],
-                                  TextField(
-                                    controller: _emailController,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Email',
-                                      hintText: 'you@store.com',
-                                    ),
-                                  ),
-                                  const SizedBox(height: 10),
-                                  TextField(
-                                    controller: _passwordController,
-                                    obscureText: !_showPassword,
-                                    decoration: InputDecoration(
-                                      labelText: 'Password',
-                                      suffixIcon: IconButton(
-                                        onPressed: () => setState(
-                                          () => _showPassword = !_showPassword,
-                                        ),
-                                        icon: Icon(
-                                          _showPassword
-                                              ? Icons.visibility_off
-                                              : Icons.visibility,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 16),
-                                  SizedBox(
-                                    width: double.infinity,
-                                    child: ElevatedButton(
-                                      onPressed: widget.onLogin,
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: c.primary,
-                                        foregroundColor: dark
-                                            ? const Color(0xFF0D1117)
-                                            : Colors.white,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            14,
-                                          ),
-                                        ),
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 13,
-                                        ),
-                                      ),
-                                      child: Text(
-                                        _registerMode
-                                            ? 'Create Account'
-                                            : 'Login',
-                                      ),
+                                  Icon(Icons.warning_amber_rounded,
+                                      color: c.error, size: 16),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      auth.errorMessage!,
+                                      style: TextStyle(
+                                          color: c.error, fontSize: 12),
                                     ),
                                   ),
                                 ],
                               ),
                             ),
+                          ],
+                          const SizedBox(height: 20),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              onPressed: auth.isLoading ? null : _submit,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: c.primary,
+                                foregroundColor: dark
+                                    ? const Color(0xFF0D1117)
+                                    : Colors.white,
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                              child: auth.isLoading
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white))
+                                  : const Text('Login',
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.w700)),
+                            ),
                           ),
-                        ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
-              ),
+              ],
             ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AuthTabButton extends StatelessWidget {
-  const _AuthTabButton({
-    required this.selected,
-    required this.label,
-    required this.onTap,
-  });
-
-  final bool selected;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final AppColors c = appColors(context);
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          gradient: selected
-              ? LinearGradient(colors: <Color>[c.primary, c.primaryDark])
-              : null,
         ),
-        alignment: Alignment.center,
-        child: Text(
-          label,
-          style: TextStyle(
-            color: selected ? Colors.white : c.textSecondary,
-            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _GlowCircle extends StatelessWidget {
-  const _GlowCircle({required this.color, required this.size});
-
-  final Color color;
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        boxShadow: <BoxShadow>[
-          BoxShadow(color: color, blurRadius: 110, spreadRadius: 50),
-        ],
       ),
     );
   }

@@ -1,310 +1,173 @@
-import 'dart:async';
-import 'dart:math';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
+import '../application/cart_provider.dart';
+import '../domain/entities/product.dart';
+import '../domain/entities/transaction.dart';
 import '../theme/app_theme.dart';
 
-class CartItem {
-  const CartItem({
-    required this.id,
-    required this.barcode,
-    required this.name,
-    required this.price,
-    required this.category,
-    required this.qty,
-  });
-
-  final String id;
-  final String barcode;
-  final String name;
-  final double price;
-  final String category;
-  final int qty;
-
-  CartItem copyWith({int? qty}) {
-    return CartItem(
-      id: id,
-      barcode: barcode,
-      name: name,
-      price: price,
-      category: category,
-      qty: qty ?? this.qty,
-    );
-  }
-}
-
-class ScannerScreen extends StatefulWidget {
+class ScannerScreen extends ConsumerStatefulWidget {
   const ScannerScreen({super.key});
 
   @override
-  State<ScannerScreen> createState() => _ScannerScreenState();
+  ConsumerState<ScannerScreen> createState() => _ScannerScreenState();
 }
 
-class _ScannerScreenState extends State<ScannerScreen> {
-  static final Map<String, ({String name, double price, String category})>
-  _products = <String, ({String name, double price, String category})>{
-    '4800098870004': (
-      name: 'Lucky Me Pancit Canton',
-      price: 11,
-      category: 'Noodles',
-    ),
-    '4800028649208': (
-      name: 'Bear Brand Milk Powder',
-      price: 13.5,
-      category: 'Dairy',
-    ),
-    '8850007212105': (
-      name: 'Oishi Prawn Crackers',
-      price: 15,
-      category: 'Snacks',
-    ),
-    '4800016310043': (
-      name: 'Century Tuna Regular',
-      price: 28.5,
-      category: 'Canned Goods',
-    ),
-    '4806520930011': (
-      name: 'Skyflakes Crackers',
-      price: 8.5,
-      category: 'Biscuits',
-    ),
-    '8991234560012': (
-      name: 'Yakult Probiotic Drink',
-      price: 12.5,
-      category: 'Beverages',
-    ),
-    '4902505193064': (
-      name: 'Nescafe 3-in-1 Coffee',
-      price: 8.75,
-      category: 'Beverages',
-    ),
-    '4800016780010': (
-      name: 'Purefoods Corned Beef',
-      price: 32,
-      category: 'Canned Goods',
-    ),
-  };
-
-  final TextEditingController _barcodeController = TextEditingController();
-  final TextEditingController _cashController = TextEditingController();
-
-  final Random _random = Random();
-  List<CartItem> _items = <CartItem>[];
-  bool _scanning = false;
-  double _scanProgress = 0;
+class _ScannerScreenState extends ConsumerState<ScannerScreen> {
+  final TextEditingController _searchCtrl = TextEditingController();
+  final TextEditingController _cashCtrl = TextEditingController();
+  bool _showSearch = false;
 
   @override
   void dispose() {
-    _barcodeController.dispose();
-    _cashController.dispose();
+    _searchCtrl.dispose();
+    _cashCtrl.dispose();
     super.dispose();
   }
 
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          duration: const Duration(milliseconds: 1300),
-        ),
-      );
-  }
-
-  double get _subtotal =>
-      _items.fold<double>(0, (double s, CartItem i) => s + (i.price * i.qty));
-  double get _vat => _subtotal * 0.12;
-  double get _total => _subtotal + _vat;
-
-  Future<void> _simulateScan() async {
-    if (_scanning) {
-      return;
-    }
-
-    setState(() {
-      _scanning = true;
-      _scanProgress = 0;
-    });
-
-    for (int i = 1; i <= 10; i++) {
-      await Future<void>.delayed(const Duration(milliseconds: 60));
-      if (!mounted) {
-        return;
-      }
-      setState(() => _scanProgress = i * 10);
-    }
-
-    final List<String> barcodes = _products.keys.toList();
-    final String barcode = barcodes[_random.nextInt(barcodes.length)];
-    _addBarcode(barcode);
-
-    if (!mounted) {
-      return;
-    }
-
-    setState(() => _scanning = false);
-  }
-
-  void _addBarcode(String barcode) {
-    final ({String name, double price, String category})? product =
-        _products[barcode.trim()];
-    if (product == null) {
-      _showMessage('Barcode not found');
-      return;
-    }
-
-    final int existing = _items.indexWhere(
-      (CartItem i) => i.barcode == barcode,
-    );
-    setState(() {
-      if (existing >= 0) {
-        _items[existing] = _items[existing].copyWith(
-          qty: _items[existing].qty + 1,
-        );
-      } else {
-        _items = <CartItem>[
-          CartItem(
-            id: DateTime.now().microsecondsSinceEpoch.toString(),
-            barcode: barcode,
-            name: product.name,
-            price: product.price,
-            category: product.category,
-            qty: 1,
-          ),
-          ..._items,
-        ];
-      }
-    });
-  }
-
-  void _updateQty(CartItem item, int delta) {
-    setState(() {
-      _items = _items.map((CartItem i) {
-        if (i.id != item.id) {
-          return i;
-        }
-        final int nextQty = (i.qty + delta).clamp(1, 999);
-        return i.copyWith(qty: nextQty);
-      }).toList();
-    });
-  }
-
-  void _removeItem(CartItem item) {
-    setState(
-      () => _items = _items.where((CartItem i) => i.id != item.id).toList(),
+  void _showMessage(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
     );
   }
 
-  void _openPayment() {
-    if (_items.isEmpty) {
-      _showMessage('No items to checkout');
+  Future<void> _showCheckoutDialog() async {
+    final CartState cart = ref.read(cartProvider);
+    if (cart.isEmpty) {
+      _showMessage('Cart is empty');
       return;
     }
 
-    _cashController.clear();
-    showModalBottomSheet<void>(
+    final TextEditingController cashCtrl = TextEditingController();
+    final TextEditingController mobileCtrl = TextEditingController();
+    String method = cart.paymentMethod;
+
+    await showDialog<void>(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: appColors(context).surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (BuildContext context) {
-        final AppColors c = appColors(context);
+      builder: (BuildContext ctx) {
+        final AppColors c = appColors(ctx);
         return StatefulBuilder(
-          builder: (BuildContext context, StateSetter setModalState) {
-            final double cash = double.tryParse(_cashController.text) ?? 0;
-            final double change = cash - _total;
+          builder: (BuildContext ctx2, StateSetter setS) {
+            final double total = cart.total;
+            final double tendered = double.tryParse(cashCtrl.text) ?? 0;
+            final double change = method == 'cash'
+                ? (tendered - total).clamp(0, double.infinity)
+                : 0;
 
-            return Padding(
-              padding: EdgeInsets.only(
-                left: 18,
-                right: 18,
-                top: 18,
-                bottom: MediaQuery.of(context).viewInsets.bottom + 18,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  Row(
-                    children: <Widget>[
-                      const Expanded(
-                        child: Text(
-                          'Cash Payment',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 18,
+            return AlertDialog(
+              title: const Text('Checkout'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      'Total: PHP ${total.toStringAsFixed(2)}',
+                      style: TextStyle(
+                        color: c.primary,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 20,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // Payment method toggle
+                    Row(
+                      children: <Widget>[
+                        Expanded(
+                          child: _PaymentChip(
+                            label: 'Cash',
+                            icon: Icons.payments_outlined,
+                            selected: method == 'cash',
+                            onTap: () => setS(() => method = 'cash'),
                           ),
                         ),
-                      ),
-                      IconButton(
-                        onPressed: () => Navigator.pop(context),
-                        icon: const Icon(Icons.close),
-                      ),
-                    ],
-                  ),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: c.surfaceMuted,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: c.border),
-                    ),
-                    child: Column(
-                      children: <Widget>[
-                        _line('Subtotal', _subtotal, c),
-                        _line('VAT (12%)', _vat, c),
-                        const Divider(height: 16),
-                        _line('TOTAL', _total, c, bold: true),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _PaymentChip(
+                            label: 'E-Wallet',
+                            icon: Icons.qr_code_outlined,
+                            selected: method == 'ewallet',
+                            onTap: () => setS(() => method = 'ewallet'),
+                          ),
+                        ),
                       ],
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: _cashController,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    textAlign: TextAlign.right,
-                    onChanged: (_) => setModalState(() {}),
-                    decoration: const InputDecoration(
-                      labelText: 'Cash Tendered',
-                      hintText: '0.00',
-                    ),
-                  ),
-                  if (cash > 0) ...<Widget>[
-                    const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: Text(
-                        change >= 0
-                            ? 'Change: PHP ${change.toStringAsFixed(2)}'
-                            : 'Short by PHP ${(-change).toStringAsFixed(2)}',
-                        style: TextStyle(
-                          color: change >= 0 ? c.primary : c.error,
-                          fontWeight: FontWeight.w700,
+                    const SizedBox(height: 12),
+                    if (method == 'cash') ...<Widget>[
+                      TextField(
+                        controller: cashCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        inputFormatters: <TextInputFormatter>[
+                          FilteringTextInputFormatter.allow(
+                              RegExp(r'^\d+\.?\d{0,2}'))
+                        ],
+                        decoration: const InputDecoration(
+                          labelText: 'Cash tendered (PHP)',
+                          prefixText: '₱ ',
                         ),
+                        onChanged: (_) => setS(() {}),
+                      ),
+                      if (tendered >= total) ...<Widget>[
+                        const SizedBox(height: 8),
+                        Text(
+                          'Change: PHP ${change.toStringAsFixed(2)}',
+                          style: TextStyle(
+                              color: c.info, fontWeight: FontWeight.w700),
+                        ),
+                      ],
+                    ],
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: mobileCtrl,
+                      keyboardType: TextInputType.phone,
+                      decoration: const InputDecoration(
+                        labelText: 'Customer mobile (optional)',
+                        hintText: '09xxxxxxxxx',
+                        prefixIcon: Icon(Icons.phone_outlined),
                       ),
                     ),
                   ],
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: cash >= _total
-                          ? () {
-                              Navigator.pop(context);
-                              _showMessage('Payment successful');
-                              setState(() => _items = <CartItem>[]);
-                            }
-                          : null,
-                      child: const Text('Confirm Payment'),
-                    ),
-                  ),
-                ],
+                ),
               ),
+              actions: <Widget>[
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final CartNotifier notifier =
+                        ref.read(cartProvider.notifier);
+                    notifier.setPaymentMethod(method);
+                    if (method == 'cash') {
+                      final double t = double.tryParse(cashCtrl.text) ?? 0;
+                      notifier.setTenderedCash(t);
+                    }
+                    if (mobileCtrl.text.isNotEmpty) {
+                      notifier.setCustomerMobile(mobileCtrl.text);
+                    }
+                    Navigator.pop(ctx);
+                    final bool ok = await notifier.checkout();
+                    if (ok && mounted) {
+                      _showReceiptDialog(ref.read(cartProvider).lastReceipt);
+                    } else if (mounted) {
+                      _showMessage(
+                          ref.read(cartProvider).error ?? 'Checkout failed');
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: appColors(ctx).primary,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Confirm'),
+                ),
+              ],
             );
           },
         );
@@ -312,278 +175,336 @@ class _ScannerScreenState extends State<ScannerScreen> {
     );
   }
 
-  Widget _line(String label, double value, AppColors c, {bool bold = false}) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: <Widget>[
-        Text(
-          label,
-          style: TextStyle(
-            color: c.textSecondary,
-            fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
+  void _showReceiptDialog(Receipt? receipt) {
+    if (receipt == null) return;
+    final Map<String, dynamic> data =
+        jsonDecode(receipt.qrPayload) as Map<String, dynamic>;
+
+    showDialog<void>(
+      context: context,
+      builder: (BuildContext ctx) {
+        final AppColors c = appColors(ctx);
+        return AlertDialog(
+          title: Row(
+            children: <Widget>[
+              Icon(Icons.check_circle, color: c.info),
+              const SizedBox(width: 8),
+              const Text('Receipt'),
+            ],
           ),
-        ),
-        Text(
-          'PHP ${value.toStringAsFixed(2)}',
-          style: TextStyle(
-            color: bold ? c.primary : c.text,
-            fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              // QR Code
+              QrImageView(
+                data: receipt.qrPayload,
+                version: QrVersions.auto,
+                size: 180,
+                backgroundColor: Colors.white,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'PHP ${(data['total'] as num).toStringAsFixed(2)}',
+                style: TextStyle(
+                  color: c.primary,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 24,
+                ),
+              ),
+              Text(
+                'Receipt #${receipt.receiptId.substring(0, 8)}',
+                style: TextStyle(color: c.textSecondary, fontSize: 12),
+              ),
+            ],
           ),
-        ),
-      ],
+          actions: <Widget>[
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Done'),
+            ),
+          ],
+        );
+      },
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final AppColors c = appColors(context);
+    final CartState cart = ref.watch(cartProvider);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 90),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
+          // Header
           Row(
             children: <Widget>[
-              const Icon(Icons.qr_code_scanner_rounded, size: 28),
+              const Icon(Icons.point_of_sale_outlined),
               const SizedBox(width: 8),
-              Text(
-                'Barcode Scanner',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontSize: 27,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
+              Text('POS', style: Theme.of(context).textTheme.titleLarge),
               const Spacer(),
-              if (_items.isNotEmpty)
-                Chip(label: Text('${_items.length} item(s)')),
+              IconButton.filledTonal(
+                onPressed: () =>
+                    setState(() => _showSearch = !_showSearch),
+                icon: Icon(
+                    _showSearch ? Icons.close : Icons.search,
+                    size: 18),
+                tooltip: 'Search products',
+              ),
             ],
           ),
-          const SizedBox(height: 4),
-          Text(
-            'Scan products to sell',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: c.textSecondary,
-            ),
-          ),
           const SizedBox(height: 10),
+
+          // Search
+          if (_showSearch) ...<Widget>[
+            TextField(
+              controller: _searchCtrl,
+              autofocus: true,
+              decoration: const InputDecoration(
+                hintText: 'Search product by name...',
+                prefixIcon: Icon(Icons.search),
+              ),
+              onChanged: (String v) =>
+                  ref.read(cartProvider.notifier).search(v),
+            ),
+            const SizedBox(height: 8),
+            // Search results
+            if (cart.searchResults.isNotEmpty)
+              Container(
+                decoration: BoxDecoration(
+                  color: c.surface,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: c.border),
+                ),
+                child: Column(
+                  children: cart.searchResults
+                      .map((Product p) => ListTile(
+                            title: Text(p.name),
+                            subtitle: Text(
+                                '${p.categoryName ?? 'Uncategorized'} | Stock: ${p.stockQty}'),
+                            trailing: Text(
+                              'PHP ${p.unitPrice.toStringAsFixed(2)}',
+                              style: TextStyle(
+                                  color: c.primary,
+                                  fontWeight: FontWeight.w700),
+                            ),
+                            onTap: () {
+                              ref
+                                  .read(cartProvider.notifier)
+                                  .addProduct(p);
+                              setState(() {
+                                _showSearch = false;
+                                _searchCtrl.clear();
+                              });
+                              ref
+                                  .read(cartProvider.notifier)
+                                  .search('');
+                            },
+                          ))
+                      .toList(),
+                ),
+              ),
+            const SizedBox(height: 12),
+          ],
+
+          // Cart summary
           Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: c.surface,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: _scanning ? c.primary : c.border),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: c.border),
             ),
-            child: Column(
+            child: Row(
               children: <Widget>[
-                Container(
-                  width: double.infinity,
-                  height: 170,
-                  decoration: BoxDecoration(
-                    color: c.surfaceMuted,
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: c.border),
-                  ),
-                  child: Stack(
-                    children: <Widget>[
-                      Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: <Widget>[
-                            Icon(
-                              Icons.qr_code_scanner_rounded,
-                              size: 42,
-                              color: c.textSecondary,
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Tap to scan',
-                              style: TextStyle(
-                                color: c.textSecondary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      _ScanCorner(
-                        alignment: Alignment.topLeft,
-                        color: c.border,
-                      ),
-                      _ScanCorner(
-                        alignment: Alignment.topRight,
-                        color: c.border,
-                      ),
-                      _ScanCorner(
-                        alignment: Alignment.bottomLeft,
-                        color: c.border,
-                      ),
-                      _ScanCorner(
-                        alignment: Alignment.bottomRight,
-                        color: c.border,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 10),
-                LinearProgressIndicator(
-                  value: _scanning ? _scanProgress / 100 : 0,
-                  minHeight: 6,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                const SizedBox(height: 10),
-                Row(
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    Expanded(
-                      child: TextField(
-                        controller: _barcodeController,
-                        decoration: const InputDecoration(
-                          hintText: 'Enter barcode manually',
-                        ),
+                    Text('Total',
+                        style: TextStyle(
+                            color: c.textSecondary, fontSize: 12)),
+                    Text(
+                      'PHP ${cart.total.toStringAsFixed(2)}',
+                      style: TextStyle(
+                        color: c.primary,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 26,
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    FilledButton(
-                      onPressed: () {
-                        _addBarcode(_barcodeController.text);
-                        _barcodeController.clear();
-                      },
-                      child: const Text('Add'),
-                    ),
+                    Text(
+                        '${cart.items.length} item${cart.items.length == 1 ? '' : 's'}',
+                        style: TextStyle(
+                            color: c.textSecondary, fontSize: 12)),
                   ],
                 ),
-                const SizedBox(height: 8),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: _simulateScan,
-                    icon: const Icon(Icons.qr_code_2_outlined),
-                    label: const Text('Simulate Scan'),
+                const Spacer(),
+                if (!cart.isEmpty)
+                  TextButton.icon(
+                    onPressed: ref.read(cartProvider.notifier).clearCart,
+                    icon: Icon(Icons.delete_outline, color: c.error),
+                    label:
+                        Text('Clear', style: TextStyle(color: c.error)),
+                  ),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  onPressed:
+                      cart.isProcessing ? null : _showCheckoutDialog,
+                  icon: cart.isProcessing
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.shopping_cart_checkout),
+                  label: const Text('Checkout'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: c.primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
                   ),
                 ),
               ],
             ),
           ),
           const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                children: <Widget>[
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: <Widget>[
-                      const Text('Subtotal'),
-                      Text('PHP ${_subtotal.toStringAsFixed(2)}'),
-                    ],
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: <Widget>[
-                      const Text('VAT'),
-                      Text('PHP ${_vat.toStringAsFixed(2)}'),
-                    ],
-                  ),
-                  const Divider(),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: <Widget>[
-                      const Text(
-                        'Total',
-                        style: TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      Text(
-                        'PHP ${_total.toStringAsFixed(2)}',
+
+          // Cart items
+          if (cart.isEmpty)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 40),
+                child: Column(
+                  children: <Widget>[
+                    Icon(Icons.shopping_cart_outlined,
+                        size: 56, color: c.textTertiary),
+                    const SizedBox(height: 12),
+                    Text('Cart is empty',
+                        style: TextStyle(color: c.textSecondary)),
+                    const SizedBox(height: 6),
+                    Text('Tap 🔍 to search and add products',
                         style: TextStyle(
-                          color: c.primary,
-                          fontWeight: FontWeight.w800,
+                            color: c.textTertiary, fontSize: 12)),
+                  ],
+                ),
+              ),
+            )
+          else
+            ...cart.items.map((CartItem item) {
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 10),
+                  child: Row(
+                    children: <Widget>[
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Text(item.product.name,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600)),
+                            Text(
+                              'PHP ${item.product.unitPrice.toStringAsFixed(2)} each',
+                              style: TextStyle(
+                                  color: c.textSecondary, fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Qty controls
+                      Row(
+                        children: <Widget>[
+                          IconButton(
+                            onPressed: () => ref
+                                .read(cartProvider.notifier)
+                                .changeQty(item.product.productId, -1),
+                            icon: const Icon(Icons.remove_circle_outline),
+                            iconSize: 20,
+                          ),
+                          Text('${item.qty}',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w700)),
+                          IconButton(
+                            onPressed: () => ref
+                                .read(cartProvider.notifier)
+                                .changeQty(item.product.productId, 1),
+                            icon: const Icon(Icons.add_circle_outline),
+                            iconSize: 20,
+                          ),
+                        ],
+                      ),
+                      // Subtotal
+                      SizedBox(
+                        width: 80,
+                        child: Text(
+                          'PHP ${item.subtotal.toStringAsFixed(2)}',
+                          textAlign: TextAlign.end,
+                          style: TextStyle(
+                            color: c.primary,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: _openPayment,
-                      child: const Text('Checkout'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          ..._items.map((CartItem item) {
-            return Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: ListTile(
-                title: Text(item.name),
-                subtitle: Text(
-                  '${item.category} | PHP ${item.price.toStringAsFixed(2)} x ${item.qty}',
                 ),
-                trailing: Wrap(
-                  spacing: 6,
-                  children: <Widget>[
-                    IconButton(
-                      onPressed: () => _updateQty(item, -1),
-                      icon: const Icon(Icons.remove_circle_outline),
-                    ),
-                    IconButton(
-                      onPressed: () => _updateQty(item, 1),
-                      icon: const Icon(Icons.add_circle_outline),
-                    ),
-                    IconButton(
-                      onPressed: () => _removeItem(item),
-                      icon: Icon(Icons.delete_outline, color: c.error),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }),
+              );
+            }),
         ],
       ),
     );
   }
 }
 
-class _ScanCorner extends StatelessWidget {
-  const _ScanCorner({required this.alignment, required this.color});
+class _PaymentChip extends StatelessWidget {
+  const _PaymentChip({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
 
-  final Alignment alignment;
-  final Color color;
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final bool top = alignment.y < 0;
-    final bool left = alignment.x < 0;
-    return Align(
-      alignment: alignment,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: SizedBox(
-          width: 18,
-          height: 18,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              border: Border(
-                top: top ? BorderSide(color: color, width: 2) : BorderSide.none,
-                bottom: !top
-                    ? BorderSide(color: color, width: 2)
-                    : BorderSide.none,
-                left: left
-                    ? BorderSide(color: color, width: 2)
-                    : BorderSide.none,
-                right: !left
-                    ? BorderSide(color: color, width: 2)
-                    : BorderSide.none,
+    final AppColors c = appColors(context);
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: selected
+              ? c.primary.withValues(alpha: 0.15)
+              : c.surfaceMuted,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected ? c.primary : c.border,
+            width: selected ? 2 : 1,
+          ),
+        ),
+        child: Column(
+          children: <Widget>[
+            Icon(icon, color: selected ? c.primary : c.textSecondary),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: selected ? c.primary : c.textSecondary,
+                fontWeight:
+                    selected ? FontWeight.w700 : FontWeight.w500,
+                fontSize: 12,
               ),
             ),
-          ),
+          ],
         ),
       ),
     );

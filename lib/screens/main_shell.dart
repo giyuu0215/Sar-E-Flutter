@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../application/auth_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/liquid_background.dart';
 import 'analytics_screen.dart';
@@ -10,20 +12,19 @@ import 'profile_screen.dart';
 import 'scanner_screen.dart';
 import 'transactions_screen.dart';
 
-class MainShell extends StatefulWidget {
-  const MainShell({
-    super.key,
-    required this.onLogout,
-  });
-
-  final VoidCallback onLogout;
+class MainShell extends ConsumerStatefulWidget {
+  const MainShell({super.key});
 
   @override
-  State<MainShell> createState() => _MainShellState();
+  ConsumerState<MainShell> createState() => _MainShellState();
 }
 
-class _MainShellState extends State<MainShell> {
+class _MainShellState extends ConsumerState<MainShell> {
   int _index = 0;
+
+  void _logout() {
+    ref.read(authProvider.notifier).logout();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -67,7 +68,7 @@ class _MainShellState extends State<MainShell> {
             iconColor: c.primary,
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) => ProfileScreen(onLogout: widget.onLogout),
+                builder: (_) => ProfileScreen(onLogout: _logout),
               ),
             ),
           ),
@@ -94,17 +95,18 @@ class _MainShellState extends State<MainShell> {
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
-        onDestinationSelected: (int value) => setState(() => _index = value),
+        onDestinationSelected: (int value) =>
+            setState(() => _index = value),
         destinations: const <NavigationDestination>[
           NavigationDestination(
-            icon: Icon(Icons.qr_code_scanner_outlined),
-            selectedIcon: Icon(Icons.qr_code_scanner),
-            label: 'Scanner',
+            icon: Icon(Icons.point_of_sale_outlined),
+            selectedIcon: Icon(Icons.point_of_sale),
+            label: 'POS',
           ),
           NavigationDestination(
             icon: Icon(Icons.menu_book_outlined),
             selectedIcon: Icon(Icons.menu_book),
-            label: 'Credits',
+            label: 'Listahan',
           ),
           NavigationDestination(
             icon: Icon(Icons.inventory_2_outlined),
