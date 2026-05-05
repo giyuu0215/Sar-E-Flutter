@@ -93,13 +93,18 @@ class _AnalyticsContent extends ConsumerWidget {
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 40,
+              reservedSize: 48,
+              interval: maxY / 4,
               getTitlesWidget: (value, meta) {
-                if (value == maxY || value == 0) return const SizedBox.shrink();
-                return Text(
-                  NumberFormat.compact().format(value),
-                  style: TextStyle(color: c.textTertiary, fontSize: 10),
-                  textAlign: TextAlign.right,
+                // Show labels at 25%, 50%, 75%, 100% of max
+                if (value == 0) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: Text(
+                    NumberFormat.compact().format(value),
+                    style: TextStyle(color: c.textTertiary, fontSize: 10),
+                    textAlign: TextAlign.right,
+                  ),
                 );
               },
             ),
@@ -136,20 +141,39 @@ class _AnalyticsContent extends ConsumerWidget {
         lineBarsData: [
           LineChartBarData(
             spots: revSpots,
-            isCurved: true,
+            isCurved: false,
             color: c.primary,
             barWidth: 2.5,
             isStrokeCapRound: true,
-            dotData: const FlDotData(show: false),
-            belowBarData: BarAreaData(show: false),
+            dotData: FlDotData(
+              show: true,
+              getDotPainter: (spot, percent, bar, index) => FlDotCirclePainter(
+                radius: 3,
+                color: c.primary,
+                strokeColor: c.surface,
+                strokeWidth: 1.5,
+              ),
+            ),
+            belowBarData: BarAreaData(
+              show: true,
+              color: c.primary.withValues(alpha: 0.06),
+            ),
           ),
           LineChartBarData(
             spots: cogsSpots,
-            isCurved: true,
+            isCurved: false,
             color: Colors.deepOrange,
             barWidth: 2.5,
             isStrokeCapRound: true,
-            dotData: const FlDotData(show: false),
+            dotData: FlDotData(
+              show: true,
+              getDotPainter: (spot, percent, bar, index) => FlDotCirclePainter(
+                radius: 3,
+                color: Colors.deepOrange,
+                strokeColor: c.surface,
+                strokeWidth: 1.5,
+              ),
+            ),
             belowBarData: BarAreaData(show: false),
           ),
         ],

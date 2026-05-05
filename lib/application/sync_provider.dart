@@ -251,10 +251,12 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
         // Remove server-only fields that don't exist in local schema
         data.remove('server_updated_at');
 
-        // Convert any Timestamp objects to ISO strings for SQLite
+        // Convert Timestamps to ISO strings and bools to 1/0 for SQLite
         for (final String key in data.keys.toList()) {
           if (data[key] is Timestamp) {
             data[key] = (data[key] as Timestamp).toDate().toIso8601String();
+          } else if (data[key] is bool) {
+            data[key] = (data[key] as bool) ? 1 : 0;
           }
         }
 

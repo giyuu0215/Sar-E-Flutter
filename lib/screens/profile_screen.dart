@@ -480,7 +480,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Profile')),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
         children: <Widget>[
           // ── Store card ─────────────────────────────────────────────────
           Container(
@@ -521,7 +521,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
 
           // ── Sync status ────────────────────────────────────────────────
           if (!auth.isOfflineMode) ...<Widget>[
@@ -676,7 +676,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     tooltip: 'Add payment option',
                   ),
                 ),
-                const Divider(height: 1),
+                const Divider(indent: 16, endIndent: 16, height: 1),
                 ...List<Widget>.generate(_qrSlots.length, (int i) {
                   final String key = _qrSlots[i]['key']!;
                   final String label = _labels[key] ?? _qrSlots[i]['label']!;
@@ -806,7 +806,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           ),
                         ),
                       ],
-                      if (i < _qrSlots.length - 1) const Divider(height: 1),
+                      if (i < _qrSlots.length - 1) const Divider(indent: 16, endIndent: 16, height: 1),
                     ],
                   );
                 }),
@@ -814,7 +814,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             ),
           ),
 
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
 
           // ── Settings tiles ─────────────────────────────────────────────
           Card(
@@ -826,7 +826,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   trailing: const Icon(Icons.chevron_right),
                   onTap: _changePin,
                 ),
-                const Divider(height: 1),
+                const Divider(indent: 16, endIndent: 16, height: 1),
                 if (auth.user?.role == 'owner') ...<Widget>[
                   ListTile(
                     leading: const Icon(Icons.person_add_alt_1_outlined),
@@ -869,7 +869,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       );
                     },
                   ),
-                  const Divider(height: 1),
+                  const Divider(indent: 16, endIndent: 16, height: 1),
                 ],
                 // Logout — session only
                 ListTile(
@@ -879,7 +879,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       style: TextStyle(fontSize: 12)),
                   onTap: _logout,
                 ),
-                const Divider(height: 1),
+                const Divider(indent: 16, endIndent: 16, height: 1),
                 // Sign Out — full reset
                 ListTile(
                   leading: Icon(Icons.exit_to_app, color: c.error),

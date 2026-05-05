@@ -6,10 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
-import 'package:path_provider/path_provider.dart';
-import 'package:open_file/open_file.dart';
+
 
 import '../application/cart_provider.dart';
 import '../domain/entities/product.dart';
@@ -382,6 +379,29 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                       ref.read(cartProvider.notifier).setTenderedCash(t);
                     }
 
+                    // ── Guard: block ewallet if no QR codes configured ──
+                    if (method == 'ewallet' && qrEntries.isEmpty) {
+                      await showDialog<void>(
+                        context: ctx,
+                        builder: (BuildContext dCtx) => AlertDialog(
+                          icon: Icon(Icons.qr_code_2,
+                              color: appColors(dCtx).warning, size: 36),
+                          title: const Text('No Payment QR Set Up'),
+                          content: const Text(
+                            'You haven\'t uploaded any QR payment codes yet.\n\n'
+                            'Go to Profile → Payment QR Codes to add your GCash, Maya, or other QR codes first.',
+                          ),
+                          actions: <Widget>[
+                            ElevatedButton(
+                              onPressed: () => Navigator.pop(dCtx),
+                              child: const Text('OK'),
+                            ),
+                          ],
+                        ),
+                      );
+                      return; // keep checkout dialog open
+                    }
+
                     ref.read(cartProvider.notifier).setPaymentMethod(method);
                     // When ewallet is selected, store the specific provider label
                     if (method == 'ewallet' && selectedQrKey != null) {
@@ -648,20 +668,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: <Widget>[
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: () =>
-                              _shareReceiptPdf(receipt, items, dateStr),
-                          icon: const Icon(Icons.share_outlined, size: 18),
-                          label: const Text('Share PDF'),
-                          style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(20))),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
+  
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton.icon(
@@ -687,83 +694,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
     );
   }
 
-  Future<void> _shareReceiptPdf(
-      Receipt receipt, List<dynamic> items, String dateStr) async {
-    final pw.Document doc = pw.Document();
 
-    doc.addPage(
-      pw.Page(
-        pageFormat: PdfPageFormat.roll80,
-        margin: const pw.EdgeInsets.all(16),
-        build: (pw.Context ctx) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: <pw.Widget>[
-              pw.Center(
-                child: pw.Text('SAR-E RECEIPT',
-                    style: pw.TextStyle(
-                        fontSize: 16, fontWeight: pw.FontWeight.bold)),
-              ),
-              pw.Center(
-                child: pw.Text(receipt.storeName,
-                    style: const pw.TextStyle(fontSize: 12)),
-              ),
-              pw.SizedBox(height: 10),
-              pw.Text(
-                  'Receipt #: ${receipt.receiptId.substring(0, 8).toUpperCase()}'),
-              pw.Text('Date: $dateStr'),
-              pw.Divider(),
-              ...items.map((dynamic it) {
-                final Map<String, dynamic> item = it as Map<String, dynamic>;
-                final String name = item['name'] as String? ?? '-';
-                final int qty = (item['qty'] as num?)?.toInt() ?? 1;
-                final double price = (item['price'] as num?)?.toDouble() ?? 0;
-                return pw.Padding(
-                  padding: const pw.EdgeInsets.symmetric(vertical: 2),
-                  child: pw.Row(
-                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                    children: <pw.Widget>[
-                      pw.Expanded(child: pw.Text('$qty x $name')),
-                      pw.Text('PHP ${(qty * price).toStringAsFixed(2)}'),
-                    ],
-                  ),
-                );
-              }),
-              pw.Divider(),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: <pw.Widget>[
-                  pw.Text('TOTAL',
-                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                  pw.Text(
-                    'PHP ${items.fold<double>(0, (double sum, dynamic it) => sum + ((it['qty'] as num).toDouble() * (it['price'] as num).toDouble())).toStringAsFixed(2)}',
-                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-                  ),
-                ],
-              ),
-              pw.SizedBox(height: 20),
-              pw.Center(
-                child: pw.Text('Thank you!',
-                    style: const pw.TextStyle(fontSize: 10)),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-
-    // Save PDF to file and open
-    try {
-      final Directory dir = await getApplicationDocumentsDirectory();
-      final String fileName = 'receipt_${receipt.receiptId.substring(0, 8)}.pdf';
-      final String filePath = '${dir.path}/$fileName';
-      final File file = File(filePath);
-      await file.writeAsBytes(await doc.save());
-      await OpenFile.open(filePath);
-    } catch (e) {
-      _showMessage('Could not save receipt PDF: $e');
-    }
-  }
 
   // Scan barcode → find product by barcode → add to cart directly
   Future<void> _scanAndAdd() async {

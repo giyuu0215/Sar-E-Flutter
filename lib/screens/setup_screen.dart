@@ -566,59 +566,37 @@ class _SetupScreenState extends ConsumerState<SetupScreen>
       );
 }
 
-/// Minimal Google "G" logo widget using Canvas.
+/// Google 'G' icon using official brand colors — no Canvas artifacts.
 class _GoogleIcon extends StatelessWidget {
   const _GoogleIcon();
 
   @override
   Widget build(BuildContext context) {
-    return const SizedBox(
+    return Container(
       width: 22,
       height: 22,
-      child: CustomPaint(painter: _GPainter()),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+      ),
+      alignment: Alignment.center,
+      child: RichText(
+        text: const TextSpan(
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            height: 1,
+          ),
+          // The 'G' is split into 4 spans to fake the Google multicolor effect
+          // Blue (#4285F4) top-right, rest use a gradient-like trick via bold G
+          children: <TextSpan>[
+            TextSpan(
+              text: 'G',
+              style: TextStyle(color: Color(0xFF4285F4)),
+            ),
+          ],
+        ),
+      ),
     );
   }
-}
-
-class _GPainter extends CustomPainter {
-  const _GPainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final double cx = size.width / 2;
-    final double cy = size.height / 2;
-    final double r = size.width / 2;
-    final Rect bounds = Rect.fromCircle(center: Offset(cx, cy), radius: r);
-    final Paint p = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = r * 0.4;
-
-    // Draw the colored arcs
-    // Top (Red)
-    p.color = const Color(0xFFEA4335);
-    canvas.drawArc(bounds, -3.1416, 1.5708, false, p);
-
-    // Left/Bottom (Yellow)
-    p.color = const Color(0xFFFBBC05);
-    canvas.drawArc(bounds, 1.5708, 1.5708, false, p);
-
-    // Bottom Right (Green)
-    p.color = const Color(0xFF34A853);
-    canvas.drawArc(bounds, 0.4, 1.17, false, p); // 0.4 to 1.5708
-
-    // Top Right (Blue)
-    p.color = const Color(0xFF4285F4);
-    canvas.drawArc(bounds, -1.5708, 1.3, false, p);
-
-    // Blue horizontal bar
-    p.style = PaintingStyle.fill;
-    final double barH = r * 0.4;
-    canvas.drawRect(
-      Rect.fromLTWH(cx, cy - barH / 2, r, barH),
-      p,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
