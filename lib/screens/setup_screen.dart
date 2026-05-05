@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../application/inventory_provider.dart';
+import '../application/listahan_provider.dart';
 import '../application/auth_provider.dart';
 import '../application/sync_provider.dart';
 import '../theme/app_theme.dart';
@@ -152,7 +154,9 @@ class _SetupScreenState extends ConsumerState<SetupScreen>
           .register(pin, _googleResult?.existingStoreName ?? 'My Store');
       if (ok) {
         // Restore all data from cloud for this returning user
-        ref.read(syncProvider.notifier).restoreFromCloud();
+        await ref.read(syncProvider.notifier).restoreFromCloud();
+        ref.invalidate(inventoryProvider);
+        ref.invalidate(listahanProvider);
       }
       if (mounted && !ok) {
         setState(() {
@@ -181,7 +185,9 @@ class _SetupScreenState extends ConsumerState<SetupScreen>
           pin, _googleResult?.existingStoreName ?? 'My Store');
       if (ok) {
         // Restore all data from cloud after PIN reset
-        ref.read(syncProvider.notifier).restoreFromCloud();
+        await ref.read(syncProvider.notifier).restoreFromCloud();
+        ref.invalidate(inventoryProvider);
+        ref.invalidate(listahanProvider);
       }
       if (mounted && !ok) {
         setState(() {

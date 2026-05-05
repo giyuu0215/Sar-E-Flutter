@@ -198,16 +198,32 @@ class _InventoryContentState extends ConsumerState<_InventoryContent> {
                     ]),
                     const SizedBox(height: 10),
                     DropdownButtonFormField<String>(
-                      initialValue: selectedCategoryId,
+                      value: selectedCategoryId,
                       hint: const Text('Category (optional)'),
-                      items: widget.state.categories
-                          .map((Category cat) => DropdownMenuItem<String>(
-                                value: cat.categoryId,
-                                child: Text(cat.name),
-                              ))
-                          .toList(),
-                      onChanged: (String? v) =>
-                          setS(() => selectedCategoryId = v),
+                      items: <DropdownMenuItem<String>>[
+                        ...widget.state.categories
+                            .map((Category cat) => DropdownMenuItem<String>(
+                                  value: cat.categoryId,
+                                  child: Text(cat.name),
+                                )),
+                        const DropdownMenuItem<String>(
+                          value: '__add_new__',
+                          child: Text('+ Add New Category',
+                              style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                      onChanged: (String? v) async {
+                        if (v == '__add_new__') {
+                          final String? newCatId = await _openAddCategoryDialog();
+                          if (newCatId != null && mounted) {
+                            setS(() => selectedCategoryId = newCatId);
+                          } else {
+                            setS(() => selectedCategoryId = null);
+                          }
+                        } else {
+                          setS(() => selectedCategoryId = v);
+                        }
+                      },
                       decoration: const InputDecoration(labelText: 'Category'),
                     ),
                   ],
@@ -369,16 +385,32 @@ class _InventoryContentState extends ConsumerState<_InventoryContent> {
                     ]),
                     const SizedBox(height: 10),
                     DropdownButtonFormField<String>(
-                      initialValue: selectedCategoryId,
+                      value: selectedCategoryId,
                       hint: const Text('Category'),
-                      items: widget.state.categories
-                          .map((Category cat) => DropdownMenuItem<String>(
-                                value: cat.categoryId,
-                                child: Text(cat.name),
-                              ))
-                          .toList(),
-                      onChanged: (String? v) =>
-                          setS(() => selectedCategoryId = v),
+                      items: <DropdownMenuItem<String>>[
+                        ...widget.state.categories
+                            .map((Category cat) => DropdownMenuItem<String>(
+                                  value: cat.categoryId,
+                                  child: Text(cat.name),
+                                )),
+                        const DropdownMenuItem<String>(
+                          value: '__add_new__',
+                          child: Text('+ Add New Category',
+                              style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                      onChanged: (String? v) async {
+                        if (v == '__add_new__') {
+                          final String? newCatId = await _openAddCategoryDialog();
+                          if (newCatId != null && mounted) {
+                            setS(() => selectedCategoryId = newCatId);
+                          } else {
+                            setS(() => selectedCategoryId = null);
+                          }
+                        } else {
+                          setS(() => selectedCategoryId = v);
+                        }
+                      },
                     ),
                   ],
                 ),
@@ -449,9 +481,9 @@ class _InventoryContentState extends ConsumerState<_InventoryContent> {
     );
   }
 
-  Future<void> _openAddCategoryDialog() async {
+  Future<String?> _openAddCategoryDialog() async {
     final TextEditingController nameCtrl = TextEditingController();
-    await showDialog<void>(
+    return showDialog<String>(
       context: context,
       builder: (BuildContext ctx) {
         return AlertDialog(
@@ -465,13 +497,9 @@ class _InventoryContentState extends ConsumerState<_InventoryContent> {
                 onPressed: () => Navigator.pop(ctx),
                 child: const Text('Cancel')),
             ElevatedButton(
-              onPressed: () async {
+              onPressed: () {
                 if (nameCtrl.text.trim().isEmpty) return;
-                Navigator.pop(ctx);
-                await ref
-                    .read(inventoryProvider.notifier)
-                    .addCategory(nameCtrl.text.trim());
-                _showMessage('Category added');
+                Navigator.pop(ctx, nameCtrl.text.trim());
               },
               style: ElevatedButton.styleFrom(
                   backgroundColor: appColors(ctx).primary,
@@ -481,7 +509,16 @@ class _InventoryContentState extends ConsumerState<_InventoryContent> {
           ],
         );
       },
-    );
+    ).then((String? name) async {
+      if (name != null && name.isNotEmpty) {
+        final String newId = await ref
+            .read(inventoryProvider.notifier)
+            .addCategory(name);
+        _showMessage('Category added');
+        return newId;
+      }
+      return null;
+    });
   }
 
   @override

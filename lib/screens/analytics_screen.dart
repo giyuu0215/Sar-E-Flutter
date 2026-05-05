@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -44,6 +45,135 @@ class _AnalyticsContent extends ConsumerWidget {
   final AnalyticsState state;
   final VoidCallback onOpenTransactions;
   final AppLocale locale;
+
+  Widget _buildChart(List<Map<String, dynamic>> rawData, AppColors c, AnalyticsPeriod period) {
+    if (rawData.isEmpty) return const SizedBox.shrink();
+
+    // fl_chart requires at least 2 points for a line. 
+    // If there is only 1 point (e.g. Today view with no prior history or just a single day), 
+    // we duplicate it so we can draw a flat line or at least a point.
+    final List<Map<String, dynamic>> data = List.from(rawData);
+    if (data.length == 1) {
+      data.add(data.first);
+    }
+
+    final double rawMaxY = data
+        .map((Map<String, dynamic> d) =>
+            math.max((d['revenue'] as num).toDouble(), (d['cogs'] as num).toDouble()))
+        .reduce(math.max) * 1.15;
+    final double maxY = math.max(rawMaxY, 1.0); // Ensure we always render
+
+    final List<FlSpot> revSpots = [];
+    final List<FlSpot> cogsSpots = [];
+
+    for (int i = 0; i < data.length; i++) {
+      revSpots.add(FlSpot(i.toDouble(), (data[i]['revenue'] as num).toDouble()));
+      cogsSpots.add(FlSpot(i.toDouble(), (data[i]['cogs'] as num).toDouble()));
+    }
+
+    return LineChart(
+      LineChartData(
+        minX: 0,
+        maxX: (data.length - 1).toDouble(),
+        minY: 0,
+        maxY: maxY,
+        gridData: FlGridData(
+          show: true,
+          drawVerticalLine: false,
+          horizontalInterval: maxY / 4,
+          getDrawingHorizontalLine: (value) => FlLine(
+            color: c.border.withValues(alpha: 0.45),
+            strokeWidth: 0.8,
+          ),
+        ),
+        titlesData: FlTitlesData(
+          show: true,
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 40,
+              getTitlesWidget: (value, meta) {
+                if (value == maxY || value == 0) return const SizedBox.shrink();
+                return Text(
+                  NumberFormat.compact().format(value),
+                  style: TextStyle(color: c.textTertiary, fontSize: 10),
+                  textAlign: TextAlign.right,
+                );
+              },
+            ),
+          ),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 22,
+              interval: math.max(1, (data.length / 5).floorToDouble()),
+              getTitlesWidget: (value, meta) {
+                final int idx = value.toInt();
+                if (idx < 0 || idx >= data.length) return const SizedBox.shrink();
+                final String dayStr = data[idx]['day'] as String;
+                DateTime? dt = DateTime.tryParse(dayStr);
+                if (dt == null) return const SizedBox.shrink();
+                
+                String label = DateFormat('MMM d').format(dt);
+                if (period == AnalyticsPeriod.daily) {
+                  label = 'Today';
+                }
+                
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Text(
+                    label,
+                    style: TextStyle(color: c.textTertiary, fontSize: 10),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+        borderData: FlBorderData(show: false),
+        lineBarsData: [
+          LineChartBarData(
+            spots: revSpots,
+            isCurved: true,
+            color: c.primary,
+            barWidth: 2.5,
+            isStrokeCapRound: true,
+            dotData: const FlDotData(show: false),
+            belowBarData: BarAreaData(show: false),
+          ),
+          LineChartBarData(
+            spots: cogsSpots,
+            isCurved: true,
+            color: Colors.deepOrange,
+            barWidth: 2.5,
+            isStrokeCapRound: true,
+            dotData: const FlDotData(show: false),
+            belowBarData: BarAreaData(show: false),
+          ),
+        ],
+        lineTouchData: LineTouchData(
+          touchTooltipData: LineTouchTooltipData(
+            getTooltipColor: (_) => c.surface,
+            getTooltipItems: (List<LineBarSpot> touchedSpots) {
+              return touchedSpots.map((LineBarSpot touchedSpot) {
+                final bool isRev = touchedSpot.barIndex == 0;
+                return LineTooltipItem(
+                  '${isRev ? "Rev" : "COGS"}: ₱${NumberFormat("#,##0.00").format(touchedSpot.y)}',
+                  TextStyle(
+                    color: isRev ? c.primary : Colors.deepOrange,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                );
+              }).toList();
+            },
+          ),
+        ),
+      ),
+    );
+  }
 
   Future<void> _exportPdf(BuildContext context) async {
     final pw.Document doc = pw.Document();
@@ -490,22 +620,9 @@ class _AnalyticsContent extends ConsumerWidget {
                       )
                     else
                       SizedBox(
-                        height: 180,
+                        height: 220,
                         width: double.infinity,
-                        child: CustomPaint(
-                          painter: _RevenueCogsChartPainter(
-                            data: state.chartData
-                                .map((Map<String, dynamic> r) => <String, num>{
-                                      'revenue': r['revenue'] as num? ?? 0,
-                                      'cogs': r['cogs'] as num? ?? 0,
-                                    })
-                                .toList(),
-                            revenueColor: c.primary,
-                            cogsColor: Colors.deepOrange,
-                            gridColor: c.border,
-                            textColor: c.textTertiary,
-                          ),
-                        ),
+                        child: _buildChart(state.chartData, c, state.period),
                       ),
                     const SizedBox(height: 8),
                     Row(children: <Widget>[
@@ -694,92 +811,4 @@ class _KpiCard extends StatelessWidget {
   }
 }
 
-class _RevenueCogsChartPainter extends CustomPainter {
-  _RevenueCogsChartPainter({
-    required this.data,
-    required this.revenueColor,
-    required this.cogsColor,
-    required this.gridColor,
-    required this.textColor,
-  });
 
-  final List<Map<String, num>> data;
-  final Color revenueColor;
-  final Color cogsColor;
-  final Color gridColor;
-  final Color textColor;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (data.isEmpty) return;
-
-    const double leftPad = 40;
-    const double rightPad = 8;
-    const double topPad = 8;
-    const double bottomPad = 26;
-
-    final Rect chart = Rect.fromLTWH(
-      leftPad,
-      topPad,
-      math.max(1, size.width - leftPad - rightPad),
-      math.max(1, size.height - topPad - bottomPad),
-    );
-
-    final double rawMaxY = data
-            .map((Map<String, num> d) =>
-                math.max(d['revenue']!.toDouble(), d['cogs']!.toDouble()))
-            .reduce(math.max) *
-        1.15;
-    final double maxY = math.max(rawMaxY, 1.0); // Ensure we always render
-
-    final Paint gridPaint = Paint()
-      ..color = gridColor.withValues(alpha: 0.45)
-      ..strokeWidth = 0.8;
-
-    for (int i = 0; i <= 4; i++) {
-      final double y = chart.top + (chart.height / 4) * i;
-      canvas.drawLine(Offset(chart.left, y), Offset(chart.right, y), gridPaint);
-    }
-
-    final List<Offset> revPts = <Offset>[];
-    final List<Offset> cogsPts = <Offset>[];
-    // Use max(1, length-1) to avoid division by zero on single data point
-    final int spread = math.max(1, data.length - 1);
-    for (int i = 0; i < data.length; i++) {
-      final double x = chart.left + (i / spread) * chart.width;
-      revPts.add(Offset(
-          x,
-          chart.bottom -
-              (data[i]['revenue']!.toDouble() / maxY) * chart.height));
-      cogsPts.add(Offset(x,
-          chart.bottom - (data[i]['cogs']!.toDouble() / maxY) * chart.height));
-    }
-
-    Path makePath(List<Offset> pts) {
-      final Path p = Path()..moveTo(pts.first.dx, pts.first.dy);
-      for (int i = 1; i < pts.length; i++) {
-        final Offset p0 = pts[i - 1];
-        final Offset p1 = pts[i];
-        final double cx = (p0.dx + p1.dx) / 2;
-        p.quadraticBezierTo(cx, p0.dy, p1.dx, p1.dy);
-      }
-      return p;
-    }
-
-    canvas.drawPath(
-        makePath(revPts),
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.5
-          ..color = revenueColor);
-    canvas.drawPath(
-        makePath(cogsPts),
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.5
-          ..color = cogsColor);
-  }
-
-  @override
-  bool shouldRepaint(covariant _RevenueCogsChartPainter old) => true;
-}

@@ -217,7 +217,7 @@ class InventoryNotifier extends AsyncNotifier<InventoryState> {
 
   // ── Categories ───────────────────────────────────────────────────────────
 
-  Future<void> addCategory(String name, {String? description}) async {
+  Future<String> addCategory(String name, {String? description}) async {
     final Category cat = Category(
       categoryId: _uuid.v4(),
       name: name,
@@ -235,6 +235,7 @@ class InventoryNotifier extends AsyncNotifier<InventoryState> {
       ref.read(syncProvider.notifier).sync();
     }
     await refresh();
+    return cat.categoryId;
   }
 
   Future<void> deleteCategory(String categoryId) async {
