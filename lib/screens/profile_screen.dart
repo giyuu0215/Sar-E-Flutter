@@ -22,11 +22,17 @@ class ProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
-  // Default fixed slots — always present, only 'other_N' slots are deletable
-  static const List<Map<String, String>> _defaultSlots = <Map<String, String>>[
-    <String, String>{'key': 'qr_gcash', 'label': 'GCash'},
-    <String, String>{'key': 'qr_maya', 'label': 'Maya'},
-    <String, String>{'key': 'qr_maribank', 'label': 'MariBank'},
+  // All QR slots are dynamic — user adds via provider dropdown.
+  // Common provider options shown in the "Add" dialog.
+  static const List<String> _commonProviders = <String>[
+    'GCash',
+    'Maya',
+    'MariBank',
+    'BPI',
+    'BDO',
+    'Instapay',
+    'Palawan',
+    'Others',
   ];
 
   // Mutable list — default slots + dynamically added ones
@@ -46,14 +52,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
 
-    // Load dynamic extra slots (stored as 'qr_extra_count' + 'qr_extra_N_key')
+    // Load all dynamic slots (stored as 'qr_extra_count' + 'qr_extra_N_key')
     final int extraCount = prefs.getInt('qr_extra_count') ?? 0;
     final List<Map<String, String>> slots = <Map<String, String>>[
-      ..._defaultSlots,
       for (int i = 0; i < extraCount; i++)
         <String, String>{
           'key': 'qr_extra_$i',
-          'label': prefs.getString('qr_extra_${i}_label') ?? 'Other ${i + 1}',
+          'label': prefs.getString('qr_extra_${i}_label') ?? 'Payment ${i + 1}',
         },
     ];
 
@@ -61,7 +66,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final Map<String, String> labels = <String, String>{};
     for (final Map<String, String> slot in slots) {
       final String k = slot['key']!;
-      // Try new decoded-data key first, fall back to legacy path for migration
       data[k] = prefs.getString('${k}_qrdata');
       labels[k] = prefs.getString('${k}_label') ?? slot['label']!;
     }
@@ -154,48 +158,96 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   Future<void> _addQrSlot() async {
-    final TextEditingController ctrl = TextEditingController();
+    String? selectedProvider;
+    final TextEditingController customCtrl = TextEditingController();
     await showDialog<void>(
       context: context,
-      builder: (BuildContext ctx) => AlertDialog(
-        title: const Text('Add Payment Option'),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          decoration: const InputDecoration(
-            labelText: 'Name',
-            hintText: 'e.g. BDO, BPI, Palawan, Instapay',
-          ),
-        ),
-        actions: <Widget>[
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () async {
-              final String name = ctrl.text.trim();
-              if (name.isEmpty) return;
-              Navigator.pop(ctx);
-              final SharedPreferences prefs =
-                  await SharedPreferences.getInstance();
-              final int count = prefs.getInt('qr_extra_count') ?? 0;
-              final String newKey = 'qr_extra_$count';
-              await prefs.setInt('qr_extra_count', count + 1);
-              await prefs.setString('${newKey}_label', name);
-              if (mounted) {
-                setState(() {
-                  _qrSlots.add(<String, String>{
-                    'key': newKey,
-                    'label': name,
-                  });
-                  _qrData[newKey] = null;
-                  _labels[newKey] = name;
-                });
-              }
-            },
-            child: const Text('Add'),
-          ),
-        ],
-      ),
+      builder: (BuildContext ctx) {
+        return StatefulBuilder(
+          builder: (_, StateSetter setS) {
+            return AlertDialog(
+              title: const Text('Add Payment Option'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  DropdownButtonFormField<String>(
+                    initialValue: selectedProvider,
+                    decoration: const InputDecoration(
+                      labelText: 'Provider',
+                      hintText: 'Select a provider',
+                    ),
+                    items: _commonProviders
+                        .map((String p) => DropdownMenuItem<String>(
+                              value: p,
+                              child: Text(p),
+                            ))
+                        .toList(),
+                    onChanged: (String? v) => setS(() => selectedProvider = v),
+                  ),
+                  if (selectedProvider == 'Others') ...[
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: customCtrl,
+                      autofocus: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Custom Name',
+                        hintText: 'e.g. UnionBank, PNB',
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              actions: <Widget>[
+                TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Cancel')),
+                ElevatedButton(
+                  onPressed: () async {
+                    String name;
+                    if (selectedProvider == null) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        const SnackBar(
+                            content: Text('Please select a provider.')),
+                      );
+                      return;
+                    }
+                    if (selectedProvider == 'Others') {
+                      name = customCtrl.text.trim();
+                      if (name.isEmpty) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          const SnackBar(
+                              content: Text('Please enter a custom name.')),
+                        );
+                        return;
+                      }
+                    } else {
+                      name = selectedProvider!;
+                    }
+                    Navigator.pop(ctx);
+                    final SharedPreferences prefs =
+                        await SharedPreferences.getInstance();
+                    final int count = prefs.getInt('qr_extra_count') ?? 0;
+                    final String newKey = 'qr_extra_$count';
+                    await prefs.setInt('qr_extra_count', count + 1);
+                    await prefs.setString('${newKey}_label', name);
+                    if (mounted) {
+                      setState(() {
+                        _qrSlots.add(<String, String>{
+                          'key': newKey,
+                          'label': name,
+                        });
+                        _qrData[newKey] = null;
+                        _labels[newKey] = name;
+                      });
+                    }
+                  },
+                  child: const Text('Add'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -634,7 +686,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       !data.startsWith('IMAGE:');
                   final bool hasImage =
                       data != null && data.startsWith('IMAGE:');
-                  final bool isDeletable = key.startsWith('qr_extra_');
+                  const bool isDeletable = true; // All dynamic slots deletable
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[

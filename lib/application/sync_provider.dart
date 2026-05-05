@@ -188,6 +188,42 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
         );
       }
 
+      // Re-enqueue all transaction line items
+      final List<Map<String, dynamic>> lineItems =
+          await db.query('transaction_line_items');
+      for (final Map<String, dynamic> li in lineItems) {
+        await enqueue(
+          entityType: 'transaction_line_items',
+          entityId: li['line_item_id'] as String,
+          operation: 'create',
+          payload: li,
+        );
+      }
+
+      // Re-enqueue all payment records
+      final List<Map<String, dynamic>> paymentRecords =
+          await db.query('payment_records');
+      for (final Map<String, dynamic> pr in paymentRecords) {
+        await enqueue(
+          entityType: 'payment_records',
+          entityId: pr['payment_id'] as String,
+          operation: 'create',
+          payload: pr,
+        );
+      }
+
+      // Re-enqueue all receipts
+      final List<Map<String, dynamic>> receiptRows =
+          await db.query('receipts');
+      for (final Map<String, dynamic> rc in receiptRows) {
+        await enqueue(
+          entityType: 'receipts',
+          entityId: rc['receipt_id'] as String,
+          operation: 'create',
+          payload: rc,
+        );
+      }
+
       debugPrint(
           '[SyncNotifier] Force full sync: enqueued ${await _pendingCount()} items');
 

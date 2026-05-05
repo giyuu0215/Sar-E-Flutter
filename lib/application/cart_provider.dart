@@ -294,6 +294,27 @@ class CartNotifier extends Notifier<CartState> {
             operation: 'create',
             payload: txn.toMap(),
           );
+          // Enqueue child entities for complete transaction graph
+          for (final TransactionLineItem li in items) {
+            await SyncNotifier.enqueue(
+              entityType: 'transaction_line_items',
+              entityId: li.lineItemId,
+              operation: 'create',
+              payload: li.toMap(),
+            );
+          }
+          await SyncNotifier.enqueue(
+            entityType: 'payment_records',
+            entityId: payment.paymentId,
+            operation: 'create',
+            payload: payment.toMap(),
+          );
+          await SyncNotifier.enqueue(
+            entityType: 'receipts',
+            entityId: receipt.receiptId,
+            operation: 'create',
+            payload: receipt.toMap(),
+          );
           ref.read(syncProvider.notifier).sync(); // fire-and-forget
         } catch (_) {} // Non-fatal: sync will retry later
       }

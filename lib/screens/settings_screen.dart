@@ -144,14 +144,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(height: 12),
 
           // ── About ────────────────────────────────────────────────────
-          const Card(
+          Card(
             child: Column(
               children: <Widget>[
                 ListTile(
-                  leading: Icon(Icons.info_outline),
-                  title: Text('About Sar-E'),
+                  leading: const Icon(Icons.info_outline),
+                  title: Text(t(locale, 'about')),
                   subtitle:
-                      Text('Version 1.0.0', style: TextStyle(fontSize: 12)),
+                      const Text('Version 1.0.0', style: TextStyle(fontSize: 12)),
                 ),
               ],
             ),

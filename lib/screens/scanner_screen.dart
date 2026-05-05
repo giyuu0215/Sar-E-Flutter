@@ -40,6 +40,29 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
     );
   }
 
+  /// Shows a blocking dialog when quantity exceeds available stock.
+  void _showStockWarning(String productName, int available) {
+    if (!mounted) return;
+    showDialog<void>(
+      context: context,
+      builder: (BuildContext ctx) => AlertDialog(
+        icon: Icon(Icons.warning_amber_rounded,
+            color: appColors(ctx).warning, size: 36),
+        title: const Text('Not enough stock'),
+        content: Text(
+          '"$productName" only has $available available in stock.\n\n'
+          'Please adjust the quantity or restock the product first.',
+        ),
+        actions: <Widget>[
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ─── Checkout Dialog ─────────────────────────────────────────────────────
 
   Future<void> _showCheckoutDialog() async {
@@ -699,11 +722,11 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
     } else {
       final Product p = results.first;
       if (p.stockQty <= 0) {
-        _showMessage('"${p.name}" is out of stock');
+        _showStockWarning(p.name, 0);
       } else {
         final String? warn = notifier.addProduct(p);
         if (warn != null) {
-          _showMessage(warn);
+          _showStockWarning(p.name, p.stockQty);
         } else {
           _showMessage('Added: ${p.name}');
         }
@@ -941,16 +964,31 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                                 if (result != null) {
                                   final int? newQty = int.tryParse(result);
                                   if (newQty != null && newQty > 0) {
-                                    final int delta = newQty - item.qty;
-                                    final String? warn = ref
-                                        .read(cartProvider.notifier)
-                                        .changeQty(
-                                            item.product.productId, delta);
-                                    if (warn != null) _showMessage(warn);
+                                    if (newQty > item.product.stockQty) {
+                                      _showStockWarning(
+                                        item.product.name,
+                                        item.product.stockQty,
+                                      );
+                                    } else {
+                                      final int delta = newQty - item.qty;
+                                      final String? warn = ref
+                                          .read(cartProvider.notifier)
+                                          .changeQty(
+                                              item.product.productId, delta);
+                                      if (warn != null) {
+                                        _showStockWarning(
+                                          item.product.name,
+                                          item.product.stockQty,
+                                        );
+                                      }
+                                    }
                                   } else if (newQty == 0) {
                                     ref
                                         .read(cartProvider.notifier)
                                         .removeItem(item.product.productId);
+                                  } else if (newQty != null && newQty < 0) {
+                                    _showMessage(
+                                        'Quantity cannot be negative.');
                                   }
                                 }
                               },
@@ -975,7 +1013,12 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                                 final String? warn = ref
                                     .read(cartProvider.notifier)
                                     .changeQty(item.product.productId, 1);
-                                if (warn != null) _showMessage(warn);
+                                if (warn != null) {
+                                  _showStockWarning(
+                                    item.product.name,
+                                    item.product.stockQty,
+                                  );
+                                }
                               },
                               icon: const Icon(Icons.add_circle_outline),
                               iconSize: 20,

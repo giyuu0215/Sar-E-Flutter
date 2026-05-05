@@ -191,6 +191,22 @@ class InventoryNotifier extends AsyncNotifier<InventoryState> {
 
   Future<void> updateStock(String productId, int newQty) async {
     await _dao.updateStock(productId, newQty);
+    if (!_isOffline) {
+      try {
+        final List<Product> products = await _dao.getAllProducts();
+        final Product? p =
+            products.where((Product x) => x.productId == productId).firstOrNull;
+        if (p != null) {
+          await SyncNotifier.enqueue(
+            entityType: 'products',
+            entityId: productId,
+            operation: 'update',
+            payload: p.copyWith(stockQty: newQty).toMap(),
+          );
+          ref.read(syncProvider.notifier).sync();
+        }
+      } catch (_) {}
+    }
     await refresh();
   }
 

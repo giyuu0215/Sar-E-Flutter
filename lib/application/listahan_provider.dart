@@ -140,7 +140,26 @@ class ListahanNotifier extends AsyncNotifier<ListahanState> {
 
   // ── Credit entries ────────────────────────────────────────────────────────
 
+  /// Insert credit entry + sync + refresh UI. Use from top-level actions.
   Future<void> addCreditEntry({
+    required String customerId,
+    required List<String> items,
+    required double amount,
+    required DateTime dueDate,
+  }) async {
+    await addCreditEntrySilent(
+      customerId: customerId,
+      items: items,
+      amount: amount,
+      dueDate: dueDate,
+    );
+    await refresh();
+  }
+
+  /// Insert credit entry + sync but **skip** refresh.
+  /// Use from inside open dialogs to avoid orphaning widget contexts
+  /// (which causes the grey overlay bug).
+  Future<void> addCreditEntrySilent({
     required String customerId,
     required List<String> items,
     required double amount,
@@ -178,7 +197,6 @@ class ListahanNotifier extends AsyncNotifier<ListahanState> {
         ref.read(syncProvider.notifier).sync(); // fire-and-forget
       } catch (_) {}
     }
-    await refresh();
   }
 
   Future<void> recordRepayment(String entryId, double amountPaid,

@@ -70,7 +70,14 @@ class _InventoryContentState extends ConsumerState<_InventoryContent> {
             ElevatedButton(
               onPressed: () async {
                 final int? addQty = int.tryParse(qtyCtrl.text);
-                if (addQty == null || addQty <= 0) return;
+                if (addQty == null) {
+                  _showMessage('Enter a valid number.');
+                  return;
+                }
+                if (addQty <= 0) {
+                  _showMessage('Quantity must be greater than zero.');
+                  return;
+                }
                 Navigator.pop(ctx);
                 await ref.read(inventoryProvider.notifier).updateStock(
                       product.productId,
@@ -217,13 +224,34 @@ class _InventoryContentState extends ConsumerState<_InventoryContent> {
                     final double cost = double.tryParse(costCtrl.text) ?? 0;
                     final int stock = int.tryParse(stockCtrl.text) ?? 0;
                     final int threshold = int.tryParse(thresholdCtrl.text) ?? 5;
-                    if (nameCtrl.text.trim().isEmpty || price <= 0) {
-                      _showMessage('Please enter a valid name and price.');
+                    if (nameCtrl.text.trim().isEmpty) {
+                      _showMessage('Product name is required.');
+                      return;
+                    }
+                    if (price <= 0) {
+                      _showMessage('Sell price must be greater than zero.');
+                      return;
+                    }
+                    if (cost < 0) {
+                      _showMessage('Cost price cannot be negative.');
+                      return;
+                    }
+                    if (stock < 0) {
+                      _showMessage('Stock quantity cannot be negative.');
+                      return;
+                    }
+                    if (threshold < 0) {
+                      _showMessage('Threshold cannot be negative.');
                       return;
                     }
                     if (barcodeCtrl.text.trim().isEmpty) {
                       _showMessage('Barcode is required.');
                       return;
+                    }
+                    if (cost > price && cost > 0) {
+                      _showMessage(
+                        'Warning: Cost (₱${cost.toStringAsFixed(2)}) exceeds sell price (₱${price.toStringAsFixed(2)}).',
+                      );
                     }
                     Navigator.pop(ctx);
                     await ref.read(inventoryProvider.notifier).addProduct(
@@ -366,18 +394,43 @@ class _InventoryContentState extends ConsumerState<_InventoryContent> {
                       setS(() => barcodeError = 'Barcode is required');
                       return;
                     }
+                    final double price =
+                        double.tryParse(priceCtrl.text) ?? product.unitPrice;
+                    final double cost =
+                        double.tryParse(costCtrl.text) ?? product.costPrice;
+                    final int stock =
+                        int.tryParse(stockCtrl.text) ?? product.stockQty;
+                    final int threshold =
+                        int.tryParse(thresholdCtrl.text) ?? product.threshold;
+                    if (price <= 0) {
+                      _showMessage('Sell price must be greater than zero.');
+                      return;
+                    }
+                    if (cost < 0) {
+                      _showMessage('Cost price cannot be negative.');
+                      return;
+                    }
+                    if (stock < 0) {
+                      _showMessage('Stock quantity cannot be negative.');
+                      return;
+                    }
+                    if (threshold < 0) {
+                      _showMessage('Threshold cannot be negative.');
+                      return;
+                    }
+                    if (cost > price && cost > 0) {
+                      _showMessage(
+                        'Warning: Cost (₱${cost.toStringAsFixed(2)}) exceeds sell price (₱${price.toStringAsFixed(2)}).',
+                      );
+                    }
                     Navigator.pop(ctx);
                     await ref.read(inventoryProvider.notifier).updateProduct(
                           product.copyWith(
                             barcode: barcodeCtrl.text.trim(),
-                            unitPrice: double.tryParse(priceCtrl.text) ??
-                                product.unitPrice,
-                            costPrice: double.tryParse(costCtrl.text) ??
-                                product.costPrice,
-                            stockQty: int.tryParse(stockCtrl.text) ??
-                                product.stockQty,
-                            threshold: int.tryParse(thresholdCtrl.text) ??
-                                product.threshold,
+                            unitPrice: price,
+                            costPrice: cost,
+                            stockQty: stock,
+                            threshold: threshold,
                             categoryId: selectedCategoryId,
                           ),
                         );

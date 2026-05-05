@@ -197,13 +197,17 @@ class _ListahanContentState extends ConsumerState<_ListahanContent> {
                         .where((String s) => s.isNotEmpty)
                         .toList();
                     Navigator.pop(ctx);
-                    await ref.read(listahanProvider.notifier).addCreditEntry(
+                    await ref
+                        .read(listahanProvider.notifier)
+                        .addCreditEntrySilent(
                           customerId: selectedCustomer!.customerId,
                           items: items,
                           amount: amount,
                           dueDate: dueDate,
                         );
                     _showMessage('Credit entry added');
+                    // Refresh AFTER dialog is gone & message shown
+                    ref.invalidate(listahanProvider);
                   },
                   style: ElevatedButton.styleFrom(
                       backgroundColor: appColors(ctx).primary,
@@ -321,6 +325,12 @@ class _ListahanContentState extends ConsumerState<_ListahanContent> {
                 final double amount = double.tryParse(amountCtrl.text) ?? 0;
                 if (amount <= 0) {
                   _showMessage('Please enter a valid amount.');
+                  return;
+                }
+                if (amount > entry.remaining) {
+                  _showMessage(
+                    'Amount exceeds outstanding balance of ₱${entry.remaining.toStringAsFixed(2)}.',
+                  );
                   return;
                 }
                 Navigator.pop(ctx);
