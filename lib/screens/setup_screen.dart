@@ -570,35 +570,37 @@ class _GPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Simplified four-colour Google 'G'
-    final Paint p = Paint()..style = PaintingStyle.fill;
     final double cx = size.width / 2;
     final double cy = size.height / 2;
     final double r = size.width / 2;
+    final Rect bounds = Rect.fromCircle(center: Offset(cx, cy), radius: r);
+    final Paint p = Paint()..style = PaintingStyle.fill;
 
-    p.color = const Color(0xFF4285F4); // Blue
-    canvas.drawArc(Rect.fromCircle(center: Offset(cx, cy), radius: r), -1.57,
-        3.14, true, p);
+    // Draw four coloured arcs (starting from right, going clockwise)
+    // Blue: top-right quadrant (–90° to 0°)
+    p.color = const Color(0xFF4285F4);
+    canvas.drawArc(bounds, -1.5708, 1.5708, true, p);
 
-    p.color = const Color(0xFF34A853); // Green
-    canvas.drawArc(Rect.fromCircle(center: Offset(cx, cy), radius: r), 1.57,
-        1.57, true, p);
+    // Red: top-left quadrant (–180° to –90°)
+    p.color = const Color(0xFFEA4335);
+    canvas.drawArc(bounds, -3.1416, 1.5708, true, p);
 
-    p.color = const Color(0xFFFBBC05); // Yellow
-    canvas.drawArc(Rect.fromCircle(center: Offset(cx, cy), radius: r), 3.14,
-        0.79, true, p);
+    // Yellow: bottom-left quadrant (180° to 270°)
+    p.color = const Color(0xFFFBBC05);
+    canvas.drawArc(bounds, 1.5708, 1.5708, true, p);
 
-    p.color = const Color(0xFFEA4335); // Red
-    canvas.drawArc(Rect.fromCircle(center: Offset(cx, cy), radius: r), 3.93,
-        0.79, true, p);
+    // Green: bottom-right quadrant (0° to 90°)
+    p.color = const Color(0xFF34A853);
+    canvas.drawArc(bounds, 0, 1.5708, true, p);
 
-    // White inner circle
+    // White inner circle (the "hole" in the G)
     p.color = Colors.white;
-    canvas.drawCircle(Offset(cx, cy), r * 0.65, p);
+    canvas.drawCircle(Offset(cx, cy), r * 0.6, p);
 
-    // Right bar of 'G'
+    // Blue horizontal bar of the G (right side only, vertically centred)
+    final double barH = r * 0.32;
     canvas.drawRect(
-      Rect.fromLTWH(cx, cy - r * 0.18, r, r * 0.36),
+      Rect.fromLTWH(cx, cy - barH / 2, r * 0.48, barH),
       Paint()..color = const Color(0xFF4285F4),
     );
   }

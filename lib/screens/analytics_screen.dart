@@ -1,13 +1,18 @@
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:open_file/open_file.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
+import 'package:sqflite/sqflite.dart' hide Transaction;
 
 import '../application/analytics_provider.dart';
+import '../data/local/database.dart';
+import '../data/local/daos/transaction_dao.dart';
 import '../domain/entities/sales_summary.dart';
 import '../domain/entities/transaction.dart';
 import '../theme/app_theme.dart';
@@ -94,7 +99,269 @@ class _AnalyticsContent extends ConsumerWidget {
         },
       ),
     );
-    await Printing.layoutPdf(onLayout: (_) async => doc.save());
+
+    // Save PDF to device storage instead of opening print dialog
+    try {
+      final Directory dir = await getApplicationDocumentsDirectory();
+      final String fileName =
+          'SarE_Report_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.pdf';
+      final String filePath = '${dir.path}/$fileName';
+      final File file = File(filePath);
+      await file.writeAsBytes(await doc.save());
+      await OpenFile.open(filePath);
+      if (context.mounted) {
+        showDialog<void>(
+          context: context,
+          builder: (BuildContext ctx) => AlertDialog(
+            icon: Icon(Icons.check_circle_rounded,
+                color: appColors(ctx).info, size: 36),
+            title: const Text('PDF Saved'),
+            content: Text('Report saved to:\n$filePath'),
+            actions: <Widget>[
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        showDialog<void>(
+          context: context,
+          builder: (BuildContext ctx) => AlertDialog(
+            icon: Icon(Icons.error_outline,
+                color: appColors(ctx).error, size: 36),
+            title: const Text('PDF Error'),
+            content: Text('Could not save PDF: $e'),
+            actions: <Widget>[
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+    }
+  }
+
+  /// Format payment method for display
+  String _formatPaymentMethod(String method) {
+    switch (method) {
+      case 'cash':
+        return 'Cash';
+      case 'ewallet':
+        return 'E-Wallet / QR';
+      default:
+        return method;
+    }
+  }
+
+  /// Show transaction detail with line items
+  Future<void> _showTransactionDetail(
+      BuildContext context, Transaction txn) async {
+    final TransactionDao dao = TransactionDao();
+    final List<TransactionLineItem> lineItems =
+        await dao.getLineItems(txn.transactionId);
+    final PaymentRecord? payment = await _getPayment(txn.transactionId);
+
+    if (!context.mounted) return;
+
+    final AppColors c = appColors(context);
+    showDialog<void>(
+      context: context,
+      builder: (BuildContext ctx) => AlertDialog(
+        contentPadding: EdgeInsets.zero,
+        content: SizedBox(
+          width: 340,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              // Header
+              Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                decoration: BoxDecoration(
+                  color: c.primary,
+                  borderRadius:
+                      const BorderRadius.vertical(top: Radius.circular(28)),
+                ),
+                child: Column(children: <Widget>[
+                  const Icon(Icons.receipt_long_outlined,
+                      color: Colors.white, size: 28),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Transaction Detail',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                    ),
+                  ),
+                  Text(
+                    DateFormat('MMM d, y – h:mm a').format(txn.timestamp),
+                    style:
+                        const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                ]),
+              ),
+
+              // Line items
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      if (lineItems.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          child: Text('No line items found',
+                              style: TextStyle(
+                                  color: c.textTertiary, fontSize: 13)),
+                        )
+                      else
+                        ...lineItems.map((TransactionLineItem li) {
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Row(children: <Widget>[
+                              Expanded(
+                                child: Text(
+                                  '${li.qty}× ${li.productName ?? li.productId}',
+                                  style: const TextStyle(fontSize: 13),
+                                ),
+                              ),
+                              Text(
+                                '₱${li.subtotal.toStringAsFixed(2)}',
+                                style: TextStyle(
+                                  color: c.primary,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ]),
+                          );
+                        }),
+                      Divider(color: c.border, height: 20),
+                      // Payment method
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: <Widget>[
+                          const Text('Payment',
+                              style: TextStyle(fontSize: 12)),
+                          Text(
+                            _formatPaymentMethod(
+                                payment?.method ?? txn.paymentMethod),
+                            style: const TextStyle(
+                                fontSize: 12, fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      // Total
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: <Widget>[
+                          Text('TOTAL',
+                              style: TextStyle(
+                                  color: c.primary,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 16)),
+                          Text(
+                            '₱${txn.totalAmount.toStringAsFixed(2)}',
+                            style: TextStyle(
+                                color: c.primary,
+                                fontWeight: FontWeight.w900,
+                                fontSize: 18),
+                          ),
+                        ],
+                      ),
+                      if (txn.changeDue > 0) ...<Widget>[
+                        const SizedBox(height: 4),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: <Widget>[
+                            Text('Change',
+                                style:
+                                    TextStyle(color: c.info, fontSize: 12)),
+                            Text(
+                              '₱${txn.changeDue.toStringAsFixed(2)}',
+                              style: TextStyle(
+                                  color: c.info,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ],
+                      const SizedBox(height: 8),
+                      // Status
+                      Center(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: txn.status == 'completed'
+                                ? c.info.withValues(alpha: 0.12)
+                                : c.warning.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            txn.status.toUpperCase(),
+                            style: TextStyle(
+                              color: txn.status == 'completed'
+                                  ? c.info
+                                  : c.warning,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                  ),
+                ),
+              ),
+
+              // Close
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: c.primary,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text('Close'),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<PaymentRecord?> _getPayment(String transactionId) async {
+    // Get payment record from DB
+    final Database db = await AppDatabase.instance;
+    final List<Map<String, dynamic>> rows = await db.query(
+      'payment_records',
+      where: 'transaction_id = ?',
+      whereArgs: <String>[transactionId],
+    );
+    if (rows.isEmpty) return null;
+    return PaymentRecord.fromMap(rows.first);
   }
 
   @override
@@ -341,6 +608,7 @@ class _AnalyticsContent extends ConsumerWidget {
                   margin: const EdgeInsets.only(bottom: 6),
                   child: ListTile(
                     dense: true,
+                    onTap: () => _showTransactionDetail(context, t),
                     leading: Icon(
                       t.paymentMethod == 'cash'
                           ? Icons.payments_outlined
@@ -351,7 +619,7 @@ class _AnalyticsContent extends ConsumerWidget {
                     title: Text('PHP ${t.totalAmount.toStringAsFixed(2)}',
                         style: const TextStyle(fontWeight: FontWeight.w600)),
                     subtitle: Text(
-                      DateFormat('MMM d, h:mm a').format(t.timestamp),
+                      '${DateFormat('MMM d, h:mm a').format(t.timestamp)}  •  ${_formatPaymentMethod(t.paymentMethod)}',
                       style: TextStyle(color: c.textSecondary, fontSize: 11),
                     ),
                     trailing: Container(

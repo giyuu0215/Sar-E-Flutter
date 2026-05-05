@@ -8,7 +8,8 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:open_file/open_file.dart';
 
 import '../application/cart_provider.dart';
 import '../domain/entities/product.dart';
@@ -61,6 +62,39 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
         ],
       ),
     );
+  }
+
+  /// Asks the user to confirm before removing an item from the cart.
+  Future<void> _confirmRemoveItem(String productName, String productId) async {
+    if (!mounted) return;
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext ctx) => AlertDialog(
+        icon: Icon(Icons.remove_shopping_cart_outlined,
+            color: appColors(ctx).warning, size: 36),
+        title: const Text('Remove Item?'),
+        content: Text(
+          'Are you sure you want to remove "$productName" from the cart?',
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: appColors(ctx).error,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      ref.read(cartProvider.notifier).removeItem(productId);
+    }
   }
 
   // ─── Checkout Dialog ─────────────────────────────────────────────────────
@@ -704,8 +738,17 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
       ),
     );
 
-    await Printing.sharePdf(
-        bytes: await doc.save(), filename: 'receipt_${receipt.receiptId}.pdf');
+    // Save PDF to file and open
+    try {
+      final Directory dir = await getApplicationDocumentsDirectory();
+      final String fileName = 'receipt_${receipt.receiptId.substring(0, 8)}.pdf';
+      final String filePath = '${dir.path}/$fileName';
+      final File file = File(filePath);
+      await file.writeAsBytes(await doc.save());
+      await OpenFile.open(filePath);
+    } catch (e) {
+      _showMessage('Could not save receipt PDF: $e');
+    }
   }
 
   // Scan barcode → find product by barcode → add to cart directly
@@ -923,6 +966,12 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                           Row(children: <Widget>[
                             IconButton(
                               onPressed: () {
+                                // If qty is already 1, confirm before removing
+                                if (item.qty <= 1) {
+                                  _confirmRemoveItem(
+                                      item.product.name, item.product.productId);
+                                  return;
+                                }
                                 final String? warn = ref
                                     .read(cartProvider.notifier)
                                     .changeQty(item.product.productId, -1);
@@ -983,12 +1032,26 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                                       }
                                     }
                                   } else if (newQty == 0) {
-                                    ref
-                                        .read(cartProvider.notifier)
-                                        .removeItem(item.product.productId);
+                                    _confirmRemoveItem(
+                                        item.product.name,
+                                        item.product.productId);
                                   } else if (newQty != null && newQty < 0) {
-                                    _showMessage(
-                                        'Quantity cannot be negative.');
+                                    showDialog<void>(
+                                      context: context,
+                                      builder: (BuildContext dCtx) => AlertDialog(
+                                        icon: Icon(Icons.error_outline,
+                                            color: appColors(dCtx).error, size: 36),
+                                        title: const Text('Invalid Quantity'),
+                                        content: const Text(
+                                            'Quantity cannot be negative.'),
+                                        actions: <Widget>[
+                                          ElevatedButton(
+                                            onPressed: () => Navigator.pop(dCtx),
+                                            child: const Text('OK'),
+                                          ),
+                                        ],
+                                      ),
+                                    );
                                   }
                                 }
                               },
