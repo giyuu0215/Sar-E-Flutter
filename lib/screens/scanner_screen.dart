@@ -383,6 +383,20 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                     }
 
                     ref.read(cartProvider.notifier).setPaymentMethod(method);
+                    // When ewallet is selected, store the specific provider label
+                    if (method == 'ewallet' && selectedQrKey != null) {
+                      final Map<String, String?>? entry = qrEntries
+                          .cast<Map<String, String?>?>()
+                          .firstWhere(
+                            (Map<String, String?>? e) =>
+                                e!['key'] == selectedQrKey,
+                            orElse: () => null,
+                          );
+                      if (entry != null && entry['label'] != null) {
+                        ref.read(cartProvider.notifier).setPaymentMethod(
+                            'ewallet:${entry['label']}');
+                      }
+                    }
                     if (mobileCtrl.text.isNotEmpty) {
                       ref
                           .read(cartProvider.notifier)

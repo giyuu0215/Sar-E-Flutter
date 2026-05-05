@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sar-E Receipt</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #0284c7; /* Sky blue/Teal tint */
+            --primary-dark: #0369a1;
+            --bg: #f8fafc;
+            --surface: #ffffff;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+            --success: #10b981;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text-main);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .receipt-card {
+            background: var(--surface);
+            width: 100%;
+            max-width: 400px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05), 0 4px 6px rgba(0, 0, 0, 0.02);
+            overflow: hidden;
+            position: relative;
+        }
+
+        .receipt-header {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            padding: 32px 24px;
+            text-align: center;
+            color: white;
+            position: relative;
+        }
+
+        .receipt-header::after {
+            content: '';
+            position: absolute;
+            bottom: -10px;
+            left: 0;
+            right: 0;
+            height: 20px;
+            background-image: radial-gradient(circle at 10px 0, transparent 10px, var(--surface) 11px);
+            background-size: 20px 20px;
+            background-repeat: repeat-x;
+        }
+
+        .store-name {
+            font-size: 24px;
+            font-weight: 800;
+            margin-bottom: 4px;
+            letter-spacing: -0.5px;
+        }
+
+        .receipt-title {
+            font-size: 14px;
+            opacity: 0.9;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
+        }
+
+        .receipt-body {
+            padding: 32px 24px;
+        }
+
+        .meta-data {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 24px;
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .meta-data div {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .meta-data span {
+            font-weight: 600;
+            color: var(--text-main);
+            margin-top: 4px;
+        }
+
+        .divider {
+            border-top: 2px dashed var(--border);
+            margin: 20px 0;
+        }
+
+        .item-list {
+            list-style: none;
+            margin-bottom: 20px;
+        }
+
+        .item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 12px;
+            font-size: 14px;
+        }
+
+        .item-details {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            padding-right: 16px;
+        }
+
+        .item-name {
+            font-weight: 600;
+            color: var(--text-main);
+            margin-bottom: 2px;
+        }
+
+        .item-qty-price {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .item-total {
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        .totals {
+            margin-top: 24px;
+        }
+
+        .total-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 15px;
+            margin-bottom: 8px;
+            color: var(--text-muted);
+        }
+
+        .total-row.grand-total {
+            font-size: 22px;
+            font-weight: 800;
+            color: var(--primary-dark);
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 2px dashed var(--border);
+        }
+
+        .payment-badge {
+            display: inline-block;
+            background: #f1f5f9;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: capitalize;
+            margin-top: 8px;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 24px;
+            background: #f8fafc;
+            border-top: 1px solid var(--border);
+            color: var(--text-muted);
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .error-state {
+            text-align: center;
+            padding: 40px 20px;
+        }
+        
+        .error-state h2 {
+            color: #ef4444;
+            margin-bottom: 10px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="app">
+        <div class="receipt-card">
+            <div class="loading">Loading receipt...</div>
+        </div>
+    </div>
+
+    <script>
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('en-PH', {
+                style: 'currency',
+                currency: 'PHP'
+            }).format(amount);
+        }
+
+        function formatDate(isoString) {
+            const date = new Date(isoString);
+            return new Intl.DateTimeFormat('en-PH', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            }).format(date);
+        }
+
+        function getPaymentDisplay(methodStr) {
+            if (!methodStr) return 'Unknown';
+            if (methodStr === 'cash') return 'Cash';
+            if (methodStr.startsWith('ewallet:')) {
+                return methodStr.split(':')[1];
+            }
+            return methodStr.charAt(0).toUpperCase() + methodStr.slice(1);
+        }
+
+        function renderReceipt(data) {
+            let itemsHtml = '';
+            
+            data.items.forEach(item => {
+                const subtotal = item.qty * item.price;
+                itemsHtml += `
+                    <li class="item">
+                        <div class="item-details">
+                            <span class="item-name">${item.name}</span>
+                            <span class="item-qty-price">${item.qty} x ${formatCurrency(item.price)}</span>
+                        </div>
+                        <span class="item-total">${formatCurrency(subtotal)}</span>
+                    </li>
+                `;
+            });
+
+            const paymentDisplay = getPaymentDisplay(data.payment_method);
+            const receiptIdShort = data.receipt_id ? data.receipt_id.substring(0, 8).toUpperCase() : 'N/A';
+
+            const html = `
+                <div class="receipt-card">
+                    <div class="receipt-header">
+                        <div class="store-name">${data.store || 'Store'}</div>
+                        <div class="receipt-title">Official Receipt</div>
+                    </div>
+                    
+                    <div class="receipt-body">
+                        <div class="meta-data">
+                            <div>
+                                Date
+                                <span>${formatDate(data.timestamp)}</span>
+                            </div>
+                            <div style="text-align: right;">
+                                Receipt No.
+                                <span>${receiptIdShort}</span>
+                            </div>
+                        </div>
+
+                        <div class="divider"></div>
+
+                        <ul class="item-list">
+                            ${itemsHtml}
+                        </ul>
+
+                        <div class="divider"></div>
+
+                        <div class="totals">
+                            <div class="total-row grand-total">
+                                <span>Total</span>
+                                <span>${formatCurrency(data.total)}</span>
+                            </div>
+                        </div>
+                        
+                        <div style="text-align: center; margin-top: 16px;">
+                            <div class="payment-badge">Paid via ${paymentDisplay}</div>
+                        </div>
+                    </div>
+
+                    <div class="footer">
+                        Powered by Sar-E POS
+                    </div>
+                </div>
+            `;
+            document.getElementById('app').innerHTML = html;
+        }
+
+        function showError(message) {
+            document.getElementById('app').innerHTML = `
+                <div class="receipt-card error-state">
+                    <h2>Invalid Receipt</h2>
+                    <p>${message}</p>
+                </div>
+            `;
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            try {
+                const hash = window.location.hash.substring(1); // remove '#'
+                if (!hash || !hash.startsWith('data=')) {
+                    showError('No receipt data found in URL.');
+                    return;
+                }
+
+                const base64Data = hash.substring(5); // remove 'data='
+                
+                // Base64Url decode logic: replace - with + and _ with /
+                let b64 = base64Data.replace(/-/g, '+').replace(/_/g, '/');
+                // Pad with =
+                const pad = b64.length % 4;
+                if (pad) {
+                    if (pad === 1) throw new Error('Invalid base64 string');
+                    b64 += new Array(5 - pad).join('=');
+                }
+
+                const jsonStr = decodeURIComponent(escape(atob(b64)));
+                const data = JSON.parse(jsonStr);
+                
+                renderReceipt(data);
+            } catch (error) {
+                console.error(error);
+                showError('Could not decode receipt data. It may be corrupted.');
+            }
+        });
+    </script>
+</body>
+</html>

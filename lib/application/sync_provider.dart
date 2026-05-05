@@ -104,6 +104,181 @@ class SyncNotifier extends AsyncNotifier<SyncState> {
     await _drain();
   }
 
+  // ── Restore from Cloud ──────────────────────────────────────────────────────
+
+  /// Downloads ALL data from Firestore into local SQLite.
+  /// Called when user logs in on a device that has no local data.
+  Future<bool> restoreFromCloud() async {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    final String? storeId = prefs.getString('storeId');
+    if (storeId == null) return false;
+
+    final bool isOffline = prefs.getBool('isOfflineMode') ?? false;
+    if (isOffline) return false;
+
+    state = AsyncData<SyncState>(
+        state.value!.copyWith(isSyncing: true, clearError: true));
+
+    try {
+      final FirebaseFirestore firestore = FirebaseFirestore.instance;
+      final DocumentReference<Map<String, dynamic>> storeRef =
+          firestore.collection('stores').doc(storeId);
+      final Database db = await AppDatabase.instance;
+
+      int totalRestored = 0;
+
+      // ── 1. Restore categories ──
+      totalRestored += await _restoreCollection(
+        storeRef: storeRef,
+        collectionName: 'categories',
+        db: db,
+        tableName: 'categories',
+        primaryKey: 'category_id',
+      );
+
+      // ── 2. Restore products ──
+      totalRestored += await _restoreCollection(
+        storeRef: storeRef,
+        collectionName: 'products',
+        db: db,
+        tableName: 'products',
+        primaryKey: 'product_id',
+      );
+
+      // ── 3. Restore customers ──
+      totalRestored += await _restoreCollection(
+        storeRef: storeRef,
+        collectionName: 'customers',
+        db: db,
+        tableName: 'customers',
+        primaryKey: 'customer_id',
+      );
+
+      // ── 4. Restore credit entries ──
+      totalRestored += await _restoreCollection(
+        storeRef: storeRef,
+        collectionName: 'credit_entries',
+        db: db,
+        tableName: 'credit_entries',
+        primaryKey: 'entry_id',
+      );
+
+      // ── 5. Restore repayments ──
+      totalRestored += await _restoreCollection(
+        storeRef: storeRef,
+        collectionName: 'repayments',
+        db: db,
+        tableName: 'repayment_records',
+        primaryKey: 'repayment_id',
+      );
+
+      // ── 6. Restore transactions ──
+      totalRestored += await _restoreCollection(
+        storeRef: storeRef,
+        collectionName: 'transactions',
+        db: db,
+        tableName: 'transactions',
+        primaryKey: 'transaction_id',
+      );
+
+      // ── 7. Restore transaction line items ──
+      totalRestored += await _restoreCollection(
+        storeRef: storeRef,
+        collectionName: 'transaction_line_items',
+        db: db,
+        tableName: 'transaction_line_items',
+        primaryKey: 'line_item_id',
+      );
+
+      // ── 8. Restore payment records ──
+      totalRestored += await _restoreCollection(
+        storeRef: storeRef,
+        collectionName: 'payment_records',
+        db: db,
+        tableName: 'payment_records',
+        primaryKey: 'payment_id',
+      );
+
+      // ── 9. Restore receipts ──
+      totalRestored += await _restoreCollection(
+        storeRef: storeRef,
+        collectionName: 'receipts',
+        db: db,
+        tableName: 'receipts',
+        primaryKey: 'receipt_id',
+      );
+
+      debugPrint('[SyncNotifier] Restored $totalRestored records from cloud');
+
+      await prefs.setString(
+          'lastCloudRestore', DateTime.now().toIso8601String());
+
+      state = AsyncData<SyncState>(state.value!.copyWith(
+        isSyncing: false,
+        lastSyncedAt: DateTime.now(),
+        pendingCount: 0,
+      ));
+      return totalRestored > 0;
+    } catch (e) {
+      debugPrint('[SyncNotifier] Cloud restore failed: $e');
+      state = AsyncData<SyncState>(state.value!.copyWith(
+        isSyncing: false,
+        lastError: 'Cloud restore failed: $e',
+      ));
+      return false;
+    }
+  }
+
+  /// Helper: downloads all docs from a Firestore subcollection and inserts
+  /// them into the corresponding local SQLite table.
+  Future<int> _restoreCollection({
+    required DocumentReference<Map<String, dynamic>> storeRef,
+    required String collectionName,
+    required Database db,
+    required String tableName,
+    required String primaryKey,
+  }) async {
+    try {
+      final QuerySnapshot<Map<String, dynamic>> snapshot =
+          await storeRef.collection(collectionName).get();
+      if (snapshot.docs.isEmpty) return 0;
+
+      int count = 0;
+      for (final QueryDocumentSnapshot<Map<String, dynamic>> doc
+          in snapshot.docs) {
+        final Map<String, dynamic> data = Map<String, dynamic>.from(doc.data());
+
+        // Remove server-only fields that don't exist in local schema
+        data.remove('server_updated_at');
+
+        // Convert any Timestamp objects to ISO strings for SQLite
+        for (final String key in data.keys.toList()) {
+          if (data[key] is Timestamp) {
+            data[key] = (data[key] as Timestamp).toDate().toIso8601String();
+          }
+        }
+
+        try {
+          await db.insert(tableName, data,
+              conflictAlgorithm: ConflictAlgorithm.replace);
+          count++;
+        } catch (e) {
+          debugPrint(
+              '[SyncNotifier] Failed to insert $collectionName/${doc.id}: $e');
+        }
+      }
+      debugPrint(
+          '[SyncNotifier] Restored $count $collectionName records');
+      return count;
+    } catch (e) {
+      debugPrint(
+          '[SyncNotifier] Failed to restore $collectionName: $e');
+      return 0;
+    }
+  }
+
+  // ── Force Full Sync ─────────────────────────────────────────────────────────
+
   /// Force full sync: re-enqueues ALL local data to Firestore.
   /// Useful when sync queue was empty but Firestore is missing data.
   Future<void> forceFullSync() async {

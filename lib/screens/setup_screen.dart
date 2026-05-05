@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../application/auth_provider.dart';
+import '../application/sync_provider.dart';
 import '../theme/app_theme.dart';
 
 // ─── Setup flow mode ────────────────────────────────────────────────────────
@@ -149,6 +150,10 @@ class _SetupScreenState extends ConsumerState<SetupScreen>
       final bool ok = await ref
           .read(authProvider.notifier)
           .register(pin, _googleResult?.existingStoreName ?? 'My Store');
+      if (ok) {
+        // Restore all data from cloud for this returning user
+        ref.read(syncProvider.notifier).restoreFromCloud();
+      }
       if (mounted && !ok) {
         setState(() {
           _isLoading = false;
@@ -174,6 +179,10 @@ class _SetupScreenState extends ConsumerState<SetupScreen>
       });
       final bool ok = await ref.read(authProvider.notifier).resetPinFromSetup(
           pin, _googleResult?.existingStoreName ?? 'My Store');
+      if (ok) {
+        // Restore all data from cloud after PIN reset
+        ref.read(syncProvider.notifier).restoreFromCloud();
+      }
       if (mounted && !ok) {
         setState(() {
           _isLoading = false;
@@ -574,34 +583,33 @@ class _GPainter extends CustomPainter {
     final double cy = size.height / 2;
     final double r = size.width / 2;
     final Rect bounds = Rect.fromCircle(center: Offset(cx, cy), radius: r);
-    final Paint p = Paint()..style = PaintingStyle.fill;
+    final Paint p = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = r * 0.4;
 
-    // Draw four coloured arcs (starting from right, going clockwise)
-    // Blue: top-right quadrant (–90° to 0°)
-    p.color = const Color(0xFF4285F4);
-    canvas.drawArc(bounds, -1.5708, 1.5708, true, p);
-
-    // Red: top-left quadrant (–180° to –90°)
+    // Draw the colored arcs
+    // Top (Red)
     p.color = const Color(0xFFEA4335);
-    canvas.drawArc(bounds, -3.1416, 1.5708, true, p);
+    canvas.drawArc(bounds, -3.1416, 1.5708, false, p);
 
-    // Yellow: bottom-left quadrant (180° to 270°)
+    // Left/Bottom (Yellow)
     p.color = const Color(0xFFFBBC05);
-    canvas.drawArc(bounds, 1.5708, 1.5708, true, p);
+    canvas.drawArc(bounds, 1.5708, 1.5708, false, p);
 
-    // Green: bottom-right quadrant (0° to 90°)
+    // Bottom Right (Green)
     p.color = const Color(0xFF34A853);
-    canvas.drawArc(bounds, 0, 1.5708, true, p);
+    canvas.drawArc(bounds, 0.4, 1.17, false, p); // 0.4 to 1.5708
 
-    // White inner circle (the "hole" in the G)
-    p.color = Colors.white;
-    canvas.drawCircle(Offset(cx, cy), r * 0.6, p);
+    // Top Right (Blue)
+    p.color = const Color(0xFF4285F4);
+    canvas.drawArc(bounds, -1.5708, 1.3, false, p);
 
-    // Blue horizontal bar of the G (right side only, vertically centred)
-    final double barH = r * 0.32;
+    // Blue horizontal bar
+    p.style = PaintingStyle.fill;
+    final double barH = r * 0.4;
     canvas.drawRect(
-      Rect.fromLTWH(cx, cy - barH / 2, r * 0.48, barH),
-      Paint()..color = const Color(0xFF4285F4),
+      Rect.fromLTWH(cx, cy - barH / 2, r, barH),
+      p,
     );
   }
 

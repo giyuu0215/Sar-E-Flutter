@@ -11,6 +11,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:sqflite/sqflite.dart' hide Transaction;
 
 import '../application/analytics_provider.dart';
+import '../application/locale_provider.dart';
 import '../data/local/database.dart';
 import '../data/local/daos/transaction_dao.dart';
 import '../domain/entities/sales_summary.dart';
@@ -28,7 +29,7 @@ class AnalyticsScreen extends ConsumerWidget {
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (Object e, _) => Center(child: Text('Error: $e')),
           data: (AnalyticsState state) => _AnalyticsContent(
-              state: state, onOpenTransactions: onOpenTransactions),
+              state: state, onOpenTransactions: onOpenTransactions, locale: ref.watch(localeProvider)),
         );
   }
 }
@@ -37,10 +38,12 @@ class _AnalyticsContent extends ConsumerWidget {
   const _AnalyticsContent({
     required this.state,
     required this.onOpenTransactions,
+    required this.locale,
   });
 
   final AnalyticsState state;
   final VoidCallback onOpenTransactions;
+  final AppLocale locale;
 
   Future<void> _exportPdf(BuildContext context) async {
     final pw.Document doc = pw.Document();
@@ -149,11 +152,15 @@ class _AnalyticsContent extends ConsumerWidget {
 
   /// Format payment method for display
   String _formatPaymentMethod(String method) {
+    // Handle provider-specific format: 'ewallet:GCash' → 'GCash'
+    if (method.startsWith('ewallet:')) {
+      return method.substring(8);
+    }
     switch (method) {
       case 'cash':
-        return 'Cash';
+        return t(locale, 'cash');
       case 'ewallet':
-        return 'E-Wallet / QR';
+        return t(locale, 'ewallet_qr');
       default:
         return method;
     }
@@ -194,7 +201,7 @@ class _AnalyticsContent extends ConsumerWidget {
                       color: Colors.white, size: 28),
                   const SizedBox(height: 6),
                   Text(
-                    'Transaction Detail',
+                    t(locale, 'transaction_detail'),
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w700,
@@ -219,7 +226,7 @@ class _AnalyticsContent extends ConsumerWidget {
                       if (lineItems.isEmpty)
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 12),
-                          child: Text('No line items found',
+                          child: Text(t(locale, 'no_line_items'),
                               style: TextStyle(
                                   color: c.textTertiary, fontSize: 13)),
                         )
@@ -250,8 +257,8 @@ class _AnalyticsContent extends ConsumerWidget {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: <Widget>[
-                          const Text('Payment',
-                              style: TextStyle(fontSize: 12)),
+                          Text(t(locale, 'payment'),
+                              style: const TextStyle(fontSize: 12)),
                           Text(
                             _formatPaymentMethod(
                                 payment?.method ?? txn.paymentMethod),
@@ -380,19 +387,19 @@ class _AnalyticsContent extends ConsumerWidget {
             Row(children: <Widget>[
               const Icon(Icons.analytics_outlined),
               const SizedBox(width: 8),
-              Text('Analytics', style: Theme.of(context).textTheme.titleLarge),
+              Text(t(locale, 'tab_analytics'), style: Theme.of(context).textTheme.titleLarge),
               const Spacer(),
               // Refresh
               IconButton(
                 onPressed: () => ref.read(analyticsProvider.notifier).refresh(),
                 icon: const Icon(Icons.refresh),
-                tooltip: 'Refresh',
+                tooltip: t(locale, 'refresh'),
               ),
               // PDF export
               IconButton(
                 onPressed: () => _exportPdf(context),
                 icon: const Icon(Icons.picture_as_pdf_outlined),
-                tooltip: 'Export PDF',
+                tooltip: t(locale, 'export_pdf'),
               ),
             ]),
             const SizedBox(height: 10),
@@ -460,12 +467,11 @@ class _AnalyticsContent extends ConsumerWidget {
                   children: <Widget>[
                     Row(
                       children: <Widget>[
-                        const Text('Revenue vs COGS',
-                            style: TextStyle(fontWeight: FontWeight.w600)),
+                        Text(t(locale, 'revenue_vs_cogs'),
+                            style: const TextStyle(fontWeight: FontWeight.w600)),
                         const SizedBox(width: 6),
                         Tooltip(
-                          message:
-                              'COGS = Cost of Goods Sold\nThe total cost price of all items sold.\nGross Profit = Revenue − COGS',
+                          message: t(locale, 'cogs_tooltip'),
                           triggerMode: TooltipTriggerMode.tap,
                           child: Icon(Icons.info_outline,
                               size: 16, color: c.textTertiary),
@@ -477,7 +483,7 @@ class _AnalyticsContent extends ConsumerWidget {
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 24),
                         child: Center(
-                          child: Text('No completed sales yet in this period',
+                          child: Text(t(locale, 'no_sales_yet'),
                               style: TextStyle(
                                   color: c.textTertiary, fontSize: 13)),
                         ),
@@ -505,13 +511,13 @@ class _AnalyticsContent extends ConsumerWidget {
                     Row(children: <Widget>[
                       Container(width: 12, height: 3, color: c.primary),
                       const SizedBox(width: 4),
-                      Text('Revenue',
+                      Text(t(locale, 'revenue'),
                           style:
                               TextStyle(color: c.textSecondary, fontSize: 11)),
                       const SizedBox(width: 12),
                       Container(width: 12, height: 3, color: Colors.deepOrange),
                       const SizedBox(width: 4),
-                      Text('COGS (cost of goods sold)',
+                      Text(t(locale, 'cogs'),
                           style:
                               TextStyle(color: c.textSecondary, fontSize: 11)),
                     ]),
@@ -591,11 +597,11 @@ class _AnalyticsContent extends ConsumerWidget {
             Card(
               child: ListTile(
                 leading: const Icon(Icons.receipt_long_outlined),
-                title: const Text('Recent Transactions'),
-                subtitle: Text('${state.txnCount} in ${state.period.label}'),
+                title: Text(t(locale, 'recent_transactions')),
+                subtitle: Text('${state.txnCount} ${t(locale, 'transactions').toLowerCase()}'),
                 trailing: TextButton(
                   onPressed: onOpenTransactions,
-                  child: const Text('View All'),
+                  child: Text(t(locale, 'view_all')),
                 ),
               ),
             ),

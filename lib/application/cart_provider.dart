@@ -167,7 +167,8 @@ class CartNotifier extends Notifier<CartState> {
 
   Future<bool> checkout() async {
     if (state.isEmpty) return false;
-    if (state.paymentMethod == 'cash') {
+    final bool isCashPayment = state.paymentMethod == 'cash';
+    if (isCashPayment) {
       if (state.tenderedCash == null || state.tenderedCash! < state.total) {
         state = state.copyWith(
             error:
@@ -240,37 +241,16 @@ class CartNotifier extends Notifier<CartState> {
             .toList(),
       };
 
-      // Build a human-readable text receipt for the QR code.
-      // When a customer scans the QR, they see a proper formatted receipt.
-      final StringBuffer receiptText = StringBuffer();
-      receiptText.writeln('=== SAR-E RECEIPT ===');
-      receiptText.writeln(storeName);
-      receiptText.writeln(
-          'Date: ${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}');
-      receiptText
-          .writeln('Receipt #: ${receiptId.substring(0, 8).toUpperCase()}');
-      receiptText.writeln('---------------------');
-      for (final CartItem ci in state.items) {
-        final String line =
-            '${ci.qty}x ${ci.product.name}  ₱${ci.subtotal.toStringAsFixed(2)}';
-        receiptText.writeln(line);
-      }
-      receiptText.writeln('---------------------');
-      receiptText.writeln('TOTAL: ₱${state.total.toStringAsFixed(2)}');
-      receiptText.writeln('Payment: ${state.paymentMethod.toUpperCase()}');
-      if (state.paymentMethod == 'cash' && state.changeDue > 0) {
-        receiptText.writeln('Change: ₱${state.changeDue.toStringAsFixed(2)}');
-      }
-      receiptText.writeln('=== THANK YOU! ===');
-      // Append JSON for internal parsing (hidden after a separator)
-      receiptText.write('\n##JSON##${jsonEncode(qrData)}');
+      final String jsonStr = jsonEncode(qrData);
+      final String base64Data = base64UrlEncode(utf8.encode(jsonStr));
+      final String qrPayload = 'https://sare-580de.web.app/#data=$base64Data';
 
       final Receipt receipt = Receipt(
         receiptId: receiptId,
         transactionId: txnId,
         storeName: storeName,
         timestamp: now,
-        qrPayload: receiptText.toString(),
+        qrPayload: qrPayload,
         customerMobile: state.customerMobile,
         deliveryStatus: 'pending',
       );
