@@ -1,87 +1,96 @@
 # Sar-E: Sari-Sari Store Management System
 
-Sar-E is a comprehensive Point of Sale (POS), Inventory, and Credit Management system built specifically for traditional neighborhood stores (Sari-Sari stores) in the Philippines.
+## 📌 Project Overview
 
-Built with **Flutter** for cross-platform compatibility, the system uses an **offline-first architecture** with **SQLite** for instant local data access, and synchronizes data to **Firebase Firestore** seamlessly in the background.
+**Sar-E** is a comprehensive, mobile-first retail management system engineered specifically for traditional micro-retail enterprises (Sari-Sari stores) in the Philippines. The application aims to digitize and streamline point-of-sale (POS) operations, inventory tracking, and micro-credit management (locally known as "Listahan").
 
-## 🚀 Key Features
+Designed to operate in low-connectivity environments, Sar-E employs an **Offline-First Architecture**. It guarantees zero downtime by performing all immediate read/write operations against a localized SQLite database, while an asynchronous background synchronization queue ensures eventual consistency with Firebase Cloud Firestore.
 
-*   **Hybrid POS (Point of Sale):**
-    *   Fast checkout with cart management.
-    *   Dynamic payment methods (Cash and E-Wallet via QR Code overlays).
-    *   Automatic change calculation for cash payments.
-*   **Smart Inventory Management:**
-    *   Real-time stock tracking with low-stock threshold alerts.
-    *   Dynamic price catalog capable of ingesting suggested prices.
-*   **Digital Listahan (Credit Tracker):**
-    *   Track customer debts, record repayments, and calculate outstanding balances.
-    *   Automated overdue flagging for past-due credits.
-*   **Offline-First & Cloud Sync:**
-    *   100% functional without an internet connection using a 16-table local SQLite database.
-    *   Background sync queue (`firestore_sync`) pushes changes to Firebase when the device goes online.
-*   **Robust Analytics:**
-    *   Monitor Revenue, COGS, Gross Profit, and Profit Margins.
-    *   Generate and export detailed Sales Reports as PDF documents.
-*   **Secure Authentication:**
-    *   PIN-based setup and login.
-    *   Security lockouts after multiple failed attempts.
+---
 
-## 🛠️ Tech Stack
+## 🏗️ System Architecture
 
-*   **Framework:** [Flutter](https://flutter.dev/) (Dart)
-*   **State Management:** [Riverpod](https://riverpod.dev/) (`flutter_riverpod` 2.x)
-*   **Local Database:** SQLite via [`sqflite`](https://pub.dev/packages/sqflite)
-*   **Cloud Backend:** Firebase (Firestore) via `firebase_core` & `cloud_firestore`
-*   **Utilities:** `connectivity_plus` (online status), `qr_flutter` (E-Wallet generation), `printing` & `pdf` (Report generation), `uuid` (UUID generation).
+The project strictly adheres to **Domain-Driven Design (DDD)** and **Clean Architecture** principles to ensure high cohesion, low coupling, and scalable maintainability.
 
-## 📁 Architecture Overview (Clean Architecture)
+### Architectural Layers
+*   **Domain Layer (`lib/domain/`):** Contains pure business logic and entity models (e.g., `Product`, `Transaction`, `CreditEntry`). It holds no dependencies on external frameworks.
+*   **Data Layer (`lib/data/`):** Implements the repository pattern. It is sub-divided into:
+    *   **Local (`data/local/`):** Contains Data Access Objects (DAOs) interfacing with the 16-table SQLite relational database (`sqflite`).
+    *   **Sync (`data/sync/`):** Manages the asynchronous operation queue, conflict resolution, and pushes data payloads to Firebase.
+*   **Application Layer (`lib/application/`):** Acts as the bridge between Domain and UI. Utilizes `flutter_riverpod` for robust, reactive state management and dependency injection.
+*   **Presentation Layer (`lib/screens/` & `lib/widgets/`):** The Flutter UI views. Designed with Material Design 3 guidelines for an intuitive, accessible user experience.
 
-The project strictly follows Domain-Driven Clean Architecture to separate UI, state, and data persistence:
+---
 
-```text
-lib/
-├── application/         # Riverpod Notifiers (State Management)
-├── data/
-│   ├── local/           # AppDatabase (SQLite) and Data Access Objects (DAOs)
-│   └── sync/            # Firebase sync queue logic
-├── domain/              # Pure Dart domain entities (Product, Transaction, etc.)
-├── screens/             # Flutter UI Views (POS, Inventory, Listahan, etc.)
-├── theme/               # Global AppTheme and AppColors
-└── widgets/             # Reusable UI components
-```
+## 🚀 Core Modules & Features
 
-## ⚙️ Getting Started
+### 1. Hybrid Point of Sale (POS)
+*   **Dynamic Cart Management:** Optimized for high-throughput transactions.
+*   **Multi-Modal Payment Gateway:** Supports traditional Cash transactions with algorithmic change computation, alongside integrated E-Wallet (GCash, Maya) processing via dynamic QR code generation (`qr_flutter`).
+
+### 2. Inventory Management System
+*   **Real-time Stock Tracking:** Implements deterministic decrementing upon successful transactions.
+*   **Low-Stock Heuristics:** Automated threshold alerts for inventory replenishment.
+*   **Dynamic Pricing Engine:** Supports algorithmic adjustments and multi-tier pricing ingestion.
+
+### 3. Digital "Listahan" (Credit Ledger)
+*   **Debt Tracking:** Comprehensive tracking of customer liabilities and installment-based repayments.
+*   **Automated Lifecycle Management:** Background tasks proactively flag entries as `overdue` based on temporal evaluations against stored due dates.
+
+### 4. Analytics & Reporting
+*   **Financial Metrics:** Aggregates and computes key performance indicators (KPIs) such as Gross Revenue, Cost of Goods Sold (COGS), and Profit Margins.
+*   **Data Exportation:** Generates formatted PDF reports via the `printing` and `pdf` libraries for external auditing and record-keeping.
+
+---
+
+## 🔒 Security Implementations
+
+*   **Cryptographic Hashing:** The primary owner authentication utilizes a 4-6 digit PIN, which is securely hashed via **SHA-256** before local storage.
+*   **Brute-Force Mitigation:** Implements an exponential backoff algorithm and a strict 30-minute security lockout after 5 consecutive failed authentication attempts.
+
+---
+
+## 🛠️ Technology Stack
+
+| Component | Technology / Package | Justification |
+| :--- | :--- | :--- |
+| **Framework** | [Flutter](https://flutter.dev/) (Dart) | Cross-platform compilation and high-performance rendering. |
+| **State Management** | [Riverpod](https://riverpod.dev/) (`flutter_riverpod` 2.x) | Compile-safe, declarative state propagation and dependency injection. |
+| **Local Persistence** | SQLite (`sqflite`) | ACID-compliant relational data storage for offline reliability. |
+| **Cloud Infrastructure** | Firebase (Firestore) | NoSQL document database for scalable cloud synchronization. |
+| **Utilities** | `connectivity_plus`, `uuid` | Network state detection and universally unique identifier generation. |
+
+---
+
+## ⚙️ Development Setup
 
 ### Prerequisites
-
-*   Flutter SDK (3.x or higher)
+*   Flutter SDK (v3.x+)
 *   Dart SDK
-*   Android Studio / Xcode for device emulation
-*   Firebase Project (for cloud sync features)
+*   Android Studio / Xcode (for emulation/compilation)
+*   A configured Firebase Project
 
-### Installation & Setup
+### Installation Protocol
 
-1.  **Clone the repository:**
+1.  **Clone the Repository:**
     ```bash
-    git clone https://github.com/your-username/sare.git
-    cd sare/frontend
+    git clone https://github.com/giyuu0215/Sar-E-Flutter.git
+    cd Sar-E-Flutter/sare
     ```
 
-2.  **Install Dependencies:**
+2.  **Resolve Dependencies:**
     ```bash
     flutter pub get
     ```
 
-3.  **Firebase Configuration:**
-    *   This project requires Firebase to operate its cloud sync queue.
-    *   Run `flutterfire configure` to generate your `firebase_options.dart`.
-    *   Alternatively, manually add your `google-services.json` (Android) and `GoogleService-Info.plist` (iOS) files to their respective directories.
+3.  **Configure Backend Services:**
+    *   Initialize the Firebase environment utilizing the FlutterFire CLI:
+        ```bash
+        flutterfire configure
+        ```
+    *   *(Alternatively, inject the `google-services.json` or `GoogleService-Info.plist` artifacts manually into their respective build directories.)*
 
-4.  **Run the App:**
+4.  **Compile & Execute:**
     ```bash
     flutter run
     ```
-
-## 🔒 Security Notes
-
-The initial owner setup requires a secure 4-6 digit PIN. This PIN is hashed locally using **SHA-256** and is required for all subsequent logins. Failing the PIN entry 5 times will trigger a 30-minute lockout.
