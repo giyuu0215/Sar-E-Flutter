@@ -72,6 +72,18 @@ class ListahanNotifier extends AsyncNotifier<ListahanState> {
   Future<ListahanState> build() async => _load();
 
   Future<ListahanState> _load() async {
+    // Bring any past-due 'active' entries up to 'overdue' in the DB
+    // so that filter tabs match correctly.
+    final List<CreditEntry> stale = await _creditDao.getAll();
+    final DateTime now = DateTime.now();
+    for (final CreditEntry e in stale) {
+      if (e.status == 'active' &&
+          e.dueDate.isBefore(now) &&
+          !e.isSettled) {
+        await _creditDao.update(e.copyWith(status: 'overdue'));
+      }
+    }
+
     final List<CreditEntry> entries = await _creditDao.getAll();
     final List<Customer> customers = await _customerDao.getAll();
     final double outstanding = await _creditDao.getTotalOutstanding();

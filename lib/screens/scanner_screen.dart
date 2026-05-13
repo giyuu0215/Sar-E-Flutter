@@ -196,7 +196,11 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> {
                           label: 'E-Wallet / QR',
                           icon: Icons.qr_code_outlined,
                           selected: method == 'ewallet',
-                          onTap: () => setS(() => method = 'ewallet'),
+                          disabled: qrEntries.isEmpty,
+                          disabledHint: 'No QR set up in Profile',
+                          onTap: qrEntries.isEmpty
+                              ? null
+                              : () => setS(() => method = 'ewallet'),
                         ),
                       ),
                     ]),
@@ -1146,39 +1150,70 @@ class _PaymentChip extends StatelessWidget {
     required this.icon,
     required this.selected,
     required this.onTap,
+    this.disabled = false,
+    this.disabledHint,
   });
 
   final String label;
   final IconData icon;
   final bool selected;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+  final bool disabled;
+  final String? disabledHint;
 
   @override
   Widget build(BuildContext context) {
     final AppColors c = appColors(context);
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
-          color: selected ? c.primary.withValues(alpha: 0.15) : c.surfaceMuted,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-              color: selected ? c.primary : c.border, width: selected ? 2 : 1),
-        ),
-        child: Column(children: <Widget>[
-          Icon(icon, color: selected ? c.primary : c.textSecondary),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              color: selected ? c.primary : c.textSecondary,
-              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-              fontSize: 12,
-            ),
+    final Color fgColor = disabled
+        ? c.textTertiary
+        : selected
+            ? c.primary
+            : c.textSecondary;
+    return Tooltip(
+      message: disabled ? (disabledHint ?? '') : '',
+      child: GestureDetector(
+        onTap: disabled ? null : onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: disabled
+                ? c.surfaceMuted.withValues(alpha: 0.5)
+                : selected
+                    ? c.primary.withValues(alpha: 0.15)
+                    : c.surfaceMuted,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+                color: disabled
+                    ? c.borderSubtle
+                    : selected
+                        ? c.primary
+                        : c.border,
+                width: selected && !disabled ? 2 : 1),
           ),
-        ]),
+          child: Column(children: <Widget>[
+            Icon(icon, color: fgColor),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: fgColor,
+                fontWeight: selected && !disabled
+                    ? FontWeight.w700
+                    : FontWeight.w500,
+                fontSize: 12,
+              ),
+            ),
+            if (disabled && disabledHint != null) ...<Widget>[
+              const SizedBox(height: 2),
+              Text(
+                disabledHint!,
+                style: TextStyle(color: c.textTertiary, fontSize: 10),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ]),
+        ),
       ),
     );
   }

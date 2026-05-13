@@ -1,9 +1,12 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../application/auth_provider.dart';
@@ -282,69 +285,305 @@ class _ListahanContentState extends ConsumerState<_ListahanContent> {
   }
 
   Future<void> _showRepayDialog(CreditEntry entry) async {
-    final TextEditingController amountCtrl = TextEditingController();
+    final TextEditingController cashCtrl = TextEditingController();
     final TextEditingController notesCtrl = TextEditingController();
+
+    // Load QR entries from SharedPreferences (same logic as checkout)
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    final List<String> staticKeys = <String>['qr_gcash', 'qr_maya', 'qr_maribank'];
+    final Map<String, String> staticLabels = <String, String>{
+      'qr_gcash': 'GCash',
+      'qr_maya': 'Maya',
+      'qr_maribank': 'MariBank',
+    };
+    final int extraCount = prefs.getInt('qr_extra_count') ?? 0;
+    final List<Map<String, String?>> qrEntries = <Map<String, String?>>[
+      for (final String k in staticKeys)
+        <String, String?>{
+          'key': k,
+          'label': prefs.getString('${k}_label') ?? staticLabels[k],
+          'data': prefs.getString('${k}_qrdata'),
+        },
+      for (int i = 0; i < extraCount; i++)
+        <String, String?>{
+          'key': 'qr_extra_$i',
+          'label': prefs.getString('qr_extra_${i}_label') ?? 'Other ${i + 1}',
+          'data': prefs.getString('qr_extra_${i}_qrdata'),
+        },
+    ].where((Map<String, String?> e) {
+      final String? d = e['data'];
+      return d != null && d.isNotEmpty;
+    }).toList();
+
+    String method = 'cash';
+    String? selectedQrKey = qrEntries.isNotEmpty ? qrEntries.first['key'] : null;
+    String? cashError;
+
+    if (!context.mounted) return;
 
     await showDialog<void>(
       context: context,
       builder: (BuildContext ctx) {
-        return AlertDialog(
-          title: Text('Repayment – ${entry.customerName}'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Text(
-                'Outstanding: PHP ${entry.remaining.toStringAsFixed(2)}',
-                style: TextStyle(
-                    color: appColors(ctx).primary, fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: amountCtrl,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(
-                  labelText: 'Amount paid (PHP) *',
-                  prefixText: '₱ ',
+        final AppColors c = appColors(ctx);
+        return StatefulBuilder(
+          builder: (BuildContext ctx2, StateSetter setS) {
+            final double outstanding = entry.remaining;
+            final double tendered = double.tryParse(cashCtrl.text) ?? 0;
+            final double change = method == 'cash' && tendered > outstanding
+                ? tendered - outstanding
+                : 0;
+            final bool canConfirm = method == 'cash'
+                ? tendered > 0
+                : qrEntries.isNotEmpty;
+
+            return AlertDialog(
+              title: Text('Repayment – ${entry.customerName}'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    // Outstanding balance
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: c.primary.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: c.primary.withValues(alpha: 0.2)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text('Outstanding Balance',
+                              style: TextStyle(color: c.textSecondary, fontSize: 12)),
+                          const SizedBox(height: 2),
+                          Text(
+                            '₱${outstanding.toStringAsFixed(2)}',
+                            style: TextStyle(
+                                color: c.primary,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 22),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Payment method toggle
+                    Row(children: <Widget>[
+                      Expanded(
+                        child: _RepayChip(
+                          label: 'Cash',
+                          icon: Icons.payments_outlined,
+                          selected: method == 'cash',
+                          onTap: () => setS(() {
+                            method = 'cash';
+                            cashError = null;
+                          }),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _RepayChip(
+                          label: 'E-Wallet / QR',
+                          icon: Icons.qr_code_outlined,
+                          selected: method == 'ewallet',
+                          disabled: qrEntries.isEmpty,
+                          disabledHint: 'No QR set up',
+                          onTap: qrEntries.isEmpty
+                              ? null
+                              : () => setS(() => method = 'ewallet'),
+                        ),
+                      ),
+                    ]),
+                    const SizedBox(height: 12),
+
+                    // Cash fields
+                    if (method == 'cash') ...<Widget>[
+                      TextField(
+                        controller: cashCtrl,
+                        autofocus: true,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        inputFormatters: <TextInputFormatter>[
+                          FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}'))
+                        ],
+                        decoration: InputDecoration(
+                          labelText: 'Cash tendered (PHP)',
+                          prefixText: '₱ ',
+                          errorText: cashError,
+                        ),
+                        onChanged: (_) => setS(() => cashError = null),
+                      ),
+                      if (tendered >= outstanding && tendered > 0) ...<Widget>[
+                        const SizedBox(height: 8),
+                        Row(children: <Widget>[
+                          Icon(Icons.check_circle_outline,
+                              color: c.info, size: 18),
+                          const SizedBox(width: 6),
+                          Text(
+                            tendered == outstanding
+                                ? 'Exact payment – no change'
+                                : 'Change: ₱${change.toStringAsFixed(2)}',
+                            style: TextStyle(
+                                color: c.info, fontWeight: FontWeight.w700),
+                          ),
+                        ]),
+                      ],
+                      if (tendered > 0 && tendered < outstanding) ...<Widget>[
+                        const SizedBox(height: 8),
+                        Text(
+                          'Remaining after payment: ₱${(outstanding - tendered).toStringAsFixed(2)}',
+                          style: TextStyle(color: c.warning, fontWeight: FontWeight.w600, fontSize: 13),
+                        ),
+                      ],
+                    ],
+
+                    // E-Wallet QR section
+                    if (method == 'ewallet') ...<Widget>[
+                      if (qrEntries.length > 1)
+                        Wrap(
+                          spacing: 8,
+                          children: qrEntries.map((Map<String, String?> e) {
+                            final bool sel = selectedQrKey == e['key'];
+                            return ChoiceChip(
+                              label: Text(e['label'] ?? ''),
+                              selected: sel,
+                              onSelected: (_) =>
+                                  setS(() => selectedQrKey = e['key']),
+                            );
+                          }).toList(),
+                        ),
+                      const SizedBox(height: 8),
+                      Builder(builder: (BuildContext _) {
+                        final Map<String, String?>? qrEntry = qrEntries
+                            .cast<Map<String, String?>?>()
+                            .firstWhere(
+                              (Map<String, String?>? e) =>
+                                  e!['key'] == selectedQrKey,
+                              orElse: () => qrEntries.isNotEmpty
+                                  ? qrEntries.first
+                                  : null,
+                            );
+                        final String? rawData = qrEntry?['data'];
+                        if (rawData == null) return const SizedBox.shrink();
+
+                        if (rawData.startsWith('IMAGE:')) {
+                          final String imgPath = rawData.substring(6);
+                          return Center(
+                            child: Column(children: <Widget>[
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: Image.file(File(imgPath),
+                                    height: 200, fit: BoxFit.contain),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Customer pays ₱${outstanding.toStringAsFixed(2)}',
+                                style: TextStyle(
+                                    color: c.textSecondary, fontSize: 13),
+                              ),
+                            ]),
+                          );
+                        }
+
+                        return Center(
+                          child: Column(children: <Widget>[
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: c.primary.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                    color: c.primary.withValues(alpha: 0.25)),
+                              ),
+                              child: QrImageView(
+                                data: rawData,
+                                version: QrVersions.auto,
+                                size: 200,
+                                backgroundColor: Colors.transparent,
+                                eyeStyle: QrEyeStyle(
+                                  eyeShape: QrEyeShape.square,
+                                  color: c.primaryDark,
+                                ),
+                                dataModuleStyle: QrDataModuleStyle(
+                                  dataModuleShape: QrDataModuleShape.square,
+                                  color: c.primaryDark,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Customer pays ₱${outstanding.toStringAsFixed(2)}',
+                              style: TextStyle(
+                                  color: c.textSecondary, fontSize: 13),
+                            ),
+                          ]),
+                        );
+                      }),
+                    ],
+
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: notesCtrl,
+                      decoration: const InputDecoration(labelText: 'Notes (optional)'),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: notesCtrl,
-                decoration:
-                    const InputDecoration(labelText: 'Notes (optional)'),
-              ),
-            ],
-          ),
-          actions: <Widget>[
-            TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Cancel')),
-            ElevatedButton(
-              onPressed: () async {
-                final double amount = double.tryParse(amountCtrl.text) ?? 0;
-                if (amount <= 0) {
-                  _showMessage('Please enter a valid amount.');
-                  return;
-                }
-                if (amount > entry.remaining) {
-                  _showMessage(
-                    'Amount exceeds outstanding balance of ₱${entry.remaining.toStringAsFixed(2)}.',
-                  );
-                  return;
-                }
-                Navigator.pop(ctx);
-                await ref.read(listahanProvider.notifier).recordRepayment(
-                    entry.entryId, amount,
-                    notes: notesCtrl.text.isNotEmpty ? notesCtrl.text : null);
-                _showMessage('Repayment recorded');
-              },
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: appColors(ctx).primary,
-                  foregroundColor: Colors.white),
-              child: const Text('Record'),
-            ),
-          ],
+              actions: <Widget>[
+                TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Cancel')),
+                ElevatedButton(
+                  onPressed: canConfirm
+                      ? () async {
+                          if (method == 'cash') {
+                            final double t = double.tryParse(cashCtrl.text) ?? 0;
+                            if (t <= 0) {
+                              setS(() => cashError = 'Enter a valid amount');
+                              return;
+                            }
+                            // Record only up to the outstanding balance
+                            final double toRecord = t.clamp(0, outstanding);
+                            Navigator.pop(ctx);
+                            await ref
+                                .read(listahanProvider.notifier)
+                                .recordRepayment(
+                                  entry.entryId,
+                                  toRecord,
+                                  notes: notesCtrl.text.isNotEmpty
+                                      ? notesCtrl.text
+                                      : null,
+                                );
+                            final double changeAmt = t > outstanding ? t - outstanding : 0;
+                            _showMessage(changeAmt > 0
+                                ? 'Repayment recorded. Change: ₱${changeAmt.toStringAsFixed(2)}'
+                                : 'Repayment recorded');
+                          } else {
+                            // E-wallet: always settle in full
+                            Navigator.pop(ctx);
+                            await ref
+                                .read(listahanProvider.notifier)
+                                .recordRepayment(
+                                  entry.entryId,
+                                  outstanding,
+                                  notes: notesCtrl.text.isNotEmpty
+                                      ? notesCtrl.text
+                                      : null,
+                                );
+                            _showMessage('E-Wallet repayment recorded');
+                          }
+                        }
+                      : null,
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: appColors(ctx).primary,
+                      foregroundColor: Colors.white),
+                  child: const Text('Record'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -676,6 +915,81 @@ class _StatCard extends StatelessWidget {
             const SizedBox(height: 2),
             Text(label, style: TextStyle(color: c.textSecondary, fontSize: 11)),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// Reusable payment method chip for the repayment dialog.
+class _RepayChip extends StatelessWidget {
+  const _RepayChip({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+    this.disabled = false,
+    this.disabledHint,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback? onTap;
+  final bool disabled;
+  final String? disabledHint;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppColors c = appColors(context);
+    final Color fgColor = disabled
+        ? c.textTertiary
+        : selected
+            ? c.primary
+            : c.textSecondary;
+    return Tooltip(
+      message: disabled ? (disabledHint ?? '') : '',
+      child: GestureDetector(
+        onTap: disabled ? null : onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: disabled
+                ? c.surfaceMuted.withValues(alpha: 0.5)
+                : selected
+                    ? c.primary.withValues(alpha: 0.15)
+                    : c.surfaceMuted,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+                color: disabled
+                    ? c.borderSubtle
+                    : selected
+                        ? c.primary
+                        : c.border,
+                width: selected && !disabled ? 2 : 1),
+          ),
+          child: Column(children: <Widget>[
+            Icon(icon, color: fgColor),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: fgColor,
+                fontWeight:
+                    selected && !disabled ? FontWeight.w700 : FontWeight.w500,
+                fontSize: 12,
+              ),
+            ),
+            if (disabled && disabledHint != null) ...<Widget>[
+              const SizedBox(height: 2),
+              Text(
+                disabledHint!,
+                style: TextStyle(color: c.textTertiary, fontSize: 10),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ]),
         ),
       ),
     );
